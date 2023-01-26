@@ -1,0 +1,17 @@
+# This file is used for the tests of automatic discovery and retrieval.
+# It is a testign asset and can be deleted safely.
+runs = 1-235
+type = Foo
+columns = one, thee, four
+1 456 72
+2 123 45
+4 125 78
+
+runs = 64-242
+2 45 78
+3 123 79
+
+runs = 123-...
+3 101 10
+6 123 45
+

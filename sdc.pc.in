@@ -1,0 +1,13 @@
+# TODO: add dependencies -- GenFit, Geant4, etc.
+
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+includedir=${prefix}/include/na64sw
+libdir=${exec_prefix}/lib/
+
+Name: na64sw
+Description: NA64 data processing framework
+URL: https://gitlab.cern.ch/P348/na64sw
+Version: @NA64DP_VERSION@
+Cflags: @USER_APP_CXX_FLAGS@ -I${includedir} -I@GenFit_INCLUDE_DIR@
+Libs: -L${libdir} -l@na64util_LIB@ -l@na64detID_LIB@ -l@na64event_LIB@ -l@na64calib_LIB@ -l@na64dp_LIB@ -l@na64app_LIB@
