@@ -1,15 +1,15 @@
-/* This file is a part of NA64SW software.
- * Copyright (C) 2015-2022 NA64 Collaboration, CERN
+/* SDC - A self-descriptive calibration data format library.
+ * Copyright (C) 2022  Renat R. Dusaev  <renat.dusaev@cern.ch>
  *
- * NA64SW is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2.1 of the License, or
- * (at your option) any later version.
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful,
+ * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>. */
@@ -101,7 +101,18 @@
 #include <fts.h>
 #include <sys/stat.h>
 
-#ifndef SDC_NO_IMPLEM
+/**\def SDC_NO_IMPLEM
+ * \brief Disables inline implementation of SDC routines
+ *
+ * This macro may is used to control the way how SDC is used. When defined to
+ * a true preprocessor value, the implementation is disabled in the header
+ * file. If the macro is not defined, a self-implemented header is implied.
+ *
+ * A false preprocessor value has the intenral special meaning of the
+ * implementation being compiled within a (shared) object file.
+ * */
+
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 #   include <string>
 #   include <iostream>
 #   include <algorithm>
@@ -120,11 +131,6 @@
 #       include <TFormula.h>
 #   endif
 #else
-/**\def SDC_NO_IMPLEM
- * \brief Disables inline implementation of SDC routines
- *
- * This macro may is used to compile this header in a reentrant lib.
- * */
 // ROOT (forward definitions)
 #   ifndef NO_ROOT
 class TFormula;  // fwd
@@ -144,7 +150,7 @@ class TFormula;  // fwd
 
 // If macro is enabled, only declarations remain here. Use it for linkage
 // compatibility.
-#ifdef SDC_NO_IMPLEM
+#if defined(SDC_NO_IMPLEM) && SDC_NO_IMPLEM
 #   define SDC_INLINE /* no inline */
 #   define SDC_ENDDECL ;
 #else
@@ -370,11 +376,11 @@ public:
         size_t nWritten = 0;
         if( ! docID.empty() ) {
             nWritten += snprintf( _errbf + nWritten, sizeof(_errbf) - nWritten
-                , "at %s", docID.c_str() );
+                , "at document %s", docID.c_str() );
         }
         if( lineNo && nWritten < sizeof(_errbf)) {
             nWritten += snprintf( _errbf + nWritten, sizeof(_errbf) - nWritten
-                , "%c%zu", (docID.empty() ? '#' : ':'), lineNo );
+                , "%c%zu ", (docID.empty() ? '#' : ':'), lineNo );
         }
         if( RuntimeError::what()
          && '\0' != *RuntimeError::what()
@@ -385,7 +391,7 @@ public:
         }
         if( (!exprTok.empty()) && nWritten < sizeof(_errbf) ) {
             nWritten += snprintf( _errbf + nWritten, sizeof(_errbf) - nWritten
-                , " at \"%s\"", exprTok.c_str() );
+                , ", \"%s\"", exprTok.c_str() );
         }
         return _errbf;
     }
@@ -520,7 +526,7 @@ class NoColumnDefinedForTable : public ParserError {
 public:
     /// Accepts name of the field of interest as problematic token
     NoColumnDefinedForTable(const std::string & fieldName)
-        : ParserError( "No column of name in the table."
+        : ParserError( "No column of name in the table"
                      , fieldName ) {}
 };
 
@@ -533,7 +539,7 @@ public:
     /// Accepts problematic document ID
     NoLoaderForDocument( const std::string di )
         : RuntimeError(std::string( "Can't parse document: \"" + di + "\"."
-                    " None of registered loaders can handle it." ))
+                    " None of registered loaders can handle it" ))
         , docID(di) {}
 };
 
@@ -638,7 +644,7 @@ matches_wildcard( const std::string & pat
                 , const std::string & path
                 , int fnmatchFlags=0x0
                 ) SDC_ENDDECL
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 {
     int rc = fnmatch( pat.c_str(), path.c_str(), fnmatchFlags );
     if( 0 == rc ) return true;
@@ -650,7 +656,7 @@ matches_wildcard( const std::string & pat
 /// Trims spaces from left and right of the line
 SDC_INLINE std::string
 trim(const std::string & strexpr ) SDC_ENDDECL
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 {
     std::string buf(strexpr);
     size_t n = 0;
@@ -668,7 +674,7 @@ trim(const std::string & strexpr ) SDC_ENDDECL
 /// Helper function for tokenization
 SDC_INLINE std::list<std::string>
 tokenize(const std::string & expr, char delim) SDC_ENDDECL
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 {
     std::list<std::string> r;
     size_t b = 0, e;
@@ -689,7 +695,7 @@ tokenize(const std::string & expr, char delim) SDC_ENDDECL
 /// Helper function for tokenization (by spaces)
 SDC_INLINE std::list<std::string>
 tokenize(const std::string & expr) SDC_ENDDECL
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 {
     std::istringstream iss(expr);
     return { std::istream_iterator<std::string>{iss}
@@ -782,7 +788,7 @@ template<typename T> T lexical_cast(const std::string & s);
 /// Specialization for STL string (trivial)
 template<> SDC_INLINE std::string
 lexical_cast<std::string>(const std::string & s) SDC_ENDDECL
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 {
     return s;
 }
@@ -791,7 +797,7 @@ lexical_cast<std::string>(const std::string & s) SDC_ENDDECL
 /// Specialization for boolean value
 template<> SDC_INLINE bool
 lexical_cast<bool>(const std::string & strexpr) SDC_ENDDECL
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 {
     static const std::set<std::string> trueLiterals
         = { "True", "true", "TRUE", "yes", "1" },
@@ -810,7 +816,7 @@ lexical_cast<bool>(const std::string & strexpr) SDC_ENDDECL
 /// Specialization for standard signed integer
 template<> SDC_INLINE int
 lexical_cast<int>(const std::string & strexpr) SDC_ENDDECL
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 {
     try {
         return std::stoi(strexpr);
@@ -826,7 +832,7 @@ lexical_cast<int>(const std::string & strexpr) SDC_ENDDECL
 /// Specialization for long unsigned integer
 template<> SDC_INLINE unsigned long
 lexical_cast<unsigned long>(const std::string & strexpr) SDC_ENDDECL
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 {
     try {
         return std::stoul(strexpr);
@@ -842,7 +848,7 @@ lexical_cast<unsigned long>(const std::string & strexpr) SDC_ENDDECL
 /// Specialization for long unsigned integer
 template<> SDC_INLINE long int
 lexical_cast<long int>(const std::string & strexpr) SDC_ENDDECL
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 {
     try {
         return std::stol(strexpr);
@@ -859,7 +865,7 @@ lexical_cast<long int>(const std::string & strexpr) SDC_ENDDECL
 /// arithmetics)
 template<> SDC_INLINE float
 lexical_cast<float>(const std::string & strexpr) SDC_ENDDECL
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 {
     if( is_numeric_literal(strexpr) ) {
         try {
@@ -891,7 +897,7 @@ lexical_cast<float>(const std::string & strexpr) SDC_ENDDECL
 /// arithmetics)
 template<> SDC_INLINE double
 lexical_cast<double>(const std::string & strexpr) SDC_ENDDECL
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 {
     if( is_numeric_literal(strexpr) ) {
         try {
@@ -937,17 +943,6 @@ struct LexicalTraits< ValidityRange<T> > {
         try {
             if(delimPos) {
                 std::string subtok(strexpr.substr(0, delimPos));
-                // TODO: lookup for updates in incremental mode when left bound
-                // is open is a bit tricky, so we do not permit for left open
-                // bounds so far.
-                #if 0
-                subtok = aux::trim(subtok);
-                if(subtok != "...") {
-                    rr.from = ValidityTraits<T>::from_string(subtok);
-                } else {
-                    rr.from = ValidityTraits<T>::unset;
-                }
-                #else
                 subtok = aux::trim(subtok);
                 if(subtok != "...") {
                     rr.from = ValidityTraits<T>::from_string(subtok);
@@ -955,7 +950,6 @@ struct LexicalTraits< ValidityRange<T> > {
                     throw errors::ParserError( "Left open bounds for validity"
                             " range is not permitted", strexpr );
                 }
-                #endif
             }
             if(std::string::npos != delimPos) {
                 std::string subtok(strexpr.substr(delimPos+1));
@@ -1106,7 +1100,7 @@ struct ColumnsOrder : public std::unordered_map<std::string, int> {
 /// Parses columns order definition
 template<> SDC_INLINE ColumnsOrder
 lexical_cast<ColumnsOrder>(const std::string & strexpr) SDC_ENDDECL
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 {
     ColumnsOrder ord;
     auto columns = tokenize(strexpr, ',');
@@ -1138,7 +1132,7 @@ private:
     FTSENT * _parent  ///< Ptr to parent entry of `fts_open()` functions
          , * _child  ///< Ptr to child entry of `fts_open()` functions
          ;
-    int _chldFlags;
+    int _chldFlags;  ///\todo xxx, unused?
 protected:
     ///\brief Returns, whether the FTS entry passes the filtering
     ///
@@ -1191,7 +1185,7 @@ public:
     }
 };  // class FTSBase
 
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 SDC_INLINE
 FTSBase::FTSBase( char * const * input
                 , int ftsChildFlags
@@ -1207,8 +1201,9 @@ FTSBase::FTSBase( char * const * input
                        , compar );
     if( !_fhandle ) {
         int ftsOpenErrNo = errno;
-        char * strerrResult
-            = strerror_r(ftsOpenErrNo, ftsErrBuf, sizeof(ftsErrBuf));
+        char * strerrResult =
+            strerror_r(ftsOpenErrNo, ftsErrBuf, sizeof(ftsErrBuf));
+        (void)strerrResult;  // supress warning on NDEBUG
         assert(strerrResult == ftsErrBuf);  // todo: wut?
         std::string errDetails(ftsErrBuf);
         errDetails = "fts_open() error: " + errDetails;
@@ -1228,6 +1223,7 @@ FTSBase::FTSBase( char * const * input
         fts_close(_fhandle);  // free handle
         char * strerrResult
             = strerror_r(ftsOpenErrNo, ftsErrBuf, sizeof(ftsErrBuf));
+        (void) strerrResult;  // supress warning on NDEBUG
         assert(strerrResult == ftsErrBuf);  // todo: wut?
         std::string errDetails(ftsErrBuf);
         throw errors::IOError(ftsErrBuf, ftsErrBuf);
@@ -1296,7 +1292,7 @@ public:
     }
 };  // class FS
 
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 SDC_INLINE bool
 FS::FTSFiltered::_fits( FTSENT * c ) const {
     std::string filepath( c->fts_path );
@@ -1362,7 +1358,7 @@ FS::FTSFiltered::_fits( FTSENT * c ) const {
 }
 #endif
 
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 SDC_INLINE
 FS::FS( const std::string & paths_
       , const std::string & acceptPatterns
@@ -1397,7 +1393,7 @@ FS::FS( const std::string & paths_
 }
 #endif
 
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 SDC_INLINE
 FS::FS(const FS & o) : pathsList(o.pathsList)
                      , _fts(nullptr)
@@ -1426,7 +1422,7 @@ FS::FS(const FS & o) : pathsList(o.pathsList)
 }
 #endif
 
-#ifndef SDC_NO_IMPLEM
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 SDC_INLINE
 FS::~FS() {
     if(_fts) delete _fts;
@@ -2173,7 +2169,9 @@ public:
         return dest;
     }
 
-    /// Dumps content to a JSON object
+    /// Dumps content to a JSON object.
+    ///
+    /// Might be useful for third-party routines.
     void dump_to_json(std::ostream & os) const {
         os << "{\"indexObject\":\"" << this << "\","
            << "\"loaders\":[";
@@ -2425,7 +2423,7 @@ public:
                          ::from_string( line.substr(eqP + 1));
             } else if( (!g.metadataTypeTag.empty())
                     && key == g.metadataTypeTag ) {
-                type = line.substr(eqP + 1);
+                type = aux::trim(line.substr(eqP + 1));
             }
             return true;
         }
@@ -2589,12 +2587,15 @@ public:  // iLoader interface implementation
      * only the document structure to add the principal metadata in index
      * (data type and the validity range).
      *
-     * \todo Support for remote location.
+     * \todo Support for remote location, user-defined access, etc.
      */
     std::list<typename Documents<KeyT>::DataBlock>
                 get_doc_struct( const std::string & docID) override {
         // open file (closed by its destructor at exit)
-        std::ifstream ifs(docID);
+        std::ifstream ifs(docID, std::ios::in);
+        if(!ifs.good()) {
+            throw errors::IOError(docID, "could not create input stream");
+        }
         return get_doc_struct(ifs);
     }
     

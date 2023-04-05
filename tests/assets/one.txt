@@ -1,17 +1,23 @@
 # This file is used for the tests of automatic discovery and retrieval.
-# It is a testign asset and can be deleted safely.
+# This is a testing asset.
 runs = 1-235
 type = Foo
-columns = one, thee, four
-1 456 72
-2 123 45
-4 125 78
+someFactor = 1
+someFormula = 1 + 32
+columns = one, three, four
+uno  456 72
+dos  123 45
+tres 125 78
 
 runs = 64-242
-2 45 78
-3 123 79
+columns = one, two, three
+someFactor = 2
+dos  45.12  78
+tres 123.1 79
 
 runs = 123-...
-3 101 10
-6 123 45
+someFactor = 3
+someFormula = 1 - 32
+tres  101 10
+cinco 123 45
 

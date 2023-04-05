@@ -1,7 +1,4 @@
-#ifdef SDC_NO_IMPLEM
-#   undef SDC_NO_IMPLEM
-#endif
-#define SDC_INLINE /*no inline*/
-#define P348_RECO_NAMESPACE p348reco
+#define SDC_NO_IMPLEM 0  // "0" has special meaning
+#define SDC_INLINE /*inline*/
 #include "sdc.hh"
 

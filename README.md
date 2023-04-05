@@ -69,7 +69,11 @@ To build SDC as a library, use CMake build procedure:
 
 Note, that if [ROOT](https://root.cern.ch) has been found during package
 configuration, the library supports evaluation of simple in-text arithmetic
-expressions.
+expressions (by [TFormula](https://root.cern.ch/doc/master/classTFormula.html),
+embedded in all numerical getters).
+
+To build static library just append cmake command
+with `-DBUILD_SHARED_LIBS=OFF`.
 
 # Naming
 
