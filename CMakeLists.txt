@@ -134,7 +134,7 @@ add_custom_target (uninstall
 # Usual CMake config export hell
 install (EXPORT ${CMAKE_PROJECT_NAME}Targets
     FILE ${CMAKE_PROJECT_NAME}Targets.cmake
-    DESTINATION lib/cmake/${CMAKE_PROJECT_NAME}Targets
+    DESTINATION lib/cmake//${CMAKE_PROJECT_NAME}
     )
 include (CMakePackageConfigHelpers)
 configure_package_config_file (${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
