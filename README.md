@@ -1,3 +1,5 @@
+[![Documentation Status](https://readthedocs.org/projects/sdc-lib/badge/?version=latest)](https://sdc-lib.readthedocs.io/en/latest/?badge=latest)
+
 #  A Simple Calibration Data Library
 
 This repository offers an approach to organize arbitrary calibration data based
