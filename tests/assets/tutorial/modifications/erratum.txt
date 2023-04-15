@@ -1,0 +1,16 @@
+# During run #3 an experimental setup was struck by a lightning so the
+# noise slightly increased
+runs=3
+columns=label,covariance
+DET1-1      0.21
+DET1-2      0.17
+DET2-1      0.34
+
+# During runs #12,13 a harsh gamma-ray galactic jet illuminated the planet,
+# so background and scaling factor were different.
+runs=12-13
+columns=label,background,covariance
+DET1-2      50      1.2345e6
+DET2-2      63      2.3456e7
+
+

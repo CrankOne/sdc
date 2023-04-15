@@ -19,9 +19,6 @@
 /**\file
  * \brief Simple calibration data utilities
  *
- * Basics
- * ======
- *
  * This is header-only library providing parser and indexing for the
  * _self-descriptive calibration_ data (or _simple calibration data_) format.
  *
@@ -86,6 +83,12 @@
  *    efficient
  * */
 
+///\defgroup compile-definitions Macros steering general features.
+///\defgroup type-traits Template type traits definitions.
+///\defgroup indexing Utils related to index of certain data type
+///\defgroup utils Various applied functions and tools (e.g. string manipulations)
+///\defgroup errors Exception types
+
 //
 // Common includes
 #include <cassert>
@@ -110,6 +113,8 @@
  *
  * A false preprocessor value has the intenral special meaning of the
  * implementation being compiled within a (shared) object file.
+ *
+ * \ingroup definitions
  * */
 
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
@@ -122,6 +127,7 @@
 #   include <functional>
 #   include <vector>
 #   include <memory>
+#   include <unordered_set>
 #   include <ctype.h>
 // POSIX-specific
 #   include <glob.h>
@@ -137,16 +143,33 @@ class TFormula;  // fwd
 #   endif
 #endif
 
+/**\def SDC_INTRADOC_MARKUP_T
+ * \brief Type of markup data within a document.
+ * 
+ *  For ASCII columnar files it is usually a line number, for binary files this
+ *  can be an offset, etc. Defined for the entire library.
+ * 
+ * \ingroup compile-definitions
+ * */
+#ifndef SDC_INTRADOC_MARKUP_T
+#   define SDC_INTRADOC_MARKUP_T size_t
+#endif
 
 /**\def SDC_INLINE
  * \brief A helper macro forcing inline definitions when needed.
  *
- * Steered by `SDC_NO_IMPLEM` */
+ * \note Depends on `SDC_NO_IMPLEM` definition
+ *
+ * \ingroup compile-definitions
+ * */
 
 /**\def SDC_ENDDECL
  * \brief A helper macro enclosing declarations when needed.
  *
- * Steered by `SDC_NO_IMPLEM` */
+ * \note Depends on `SDC_NO_IMPLEM` definition
+ *
+ * \ingroup compile-definitions
+ * */
 
 // If macro is enabled, only declarations remain here. Use it for linkage
 // compatibility.
@@ -181,21 +204,26 @@ class TFormula;  // fwd
 
 //
 // Logging
-#ifndef WARN_LOG
+#ifndef WARN_LOG   // TODO
 #   include <iostream>
 #   define WARN_LOG std::cerr
 #endif
 
 namespace sdc {
 
+typedef SDC_INTRADOC_MARKUP_T IntradocMarkup_t;
+
 //                                                   __________________________
 // ________________________________________________/ Run ID & runs range types
 
-///\brief Validity identifier type
-///
-/// A traits may be specialized for particular validity key type: run number,
-/// astronomical time, etc, though generic implementation is good enought for
-/// simple types like integer run number, `time_t` etc.
+/**\brief Validity identifier type
+ *
+ * A traits may be specialized for particular validity key type: run number,
+ * astronomical time, etc, though generic implementation is good enought for
+ * simple types like integer run number, `time_t` etc.
+ *
+ * \ingroup type-traits
+ * */
 template<typename T>
 struct ValidityTraits {
     static constexpr T unset = 0;
@@ -208,11 +236,18 @@ struct ValidityTraits {
     using Less = std::less<T>;
 };
 
-/// A struct representing runs range; come at hand with intersection operator
+/**\brief A struct representing runs range; come at hand with intersection
+ *       operator
+ *
+ * Parameterised with validity key type, defines a validity range -- usually,
+ * a time or run number interval when certain data considered valid.
+ *
+ * \ingroup indexing
+ * */
 template<typename T>
 struct ValidityRange {
-    T from  ///< validity period start (inclusively)
-    , to;  ///< validity period end (exclusively)
+    T from  /// validity period start
+    , to;  ///< validity period end
 
     ///\brief Returns intersection of two runs range
     ///
@@ -262,7 +297,8 @@ struct ValidityRange {
  * provided by `ValidityTraits<T>::strRangeDelimiter`. The validity bounds
  * are printed as it is defined by `ValidityTraits<T>::to_string()` except for
  * "unset" value which is denoted with "...".
- */
+ *
+ * \ingroup utils */
 template<typename T>
 std::ostream & operator<<(std::ostream & os, const ValidityRange<T> & rr ) {
     if( ValidityTraits<T>::is_set(rr.from) )
@@ -287,6 +323,8 @@ namespace errors {
 ///
 /// User code may catch exceptions of this class to block error propagation
 /// from the SDC module.
+///
+///\ingroup errors
 class RuntimeError : public std::runtime_error {
 public:
     RuntimeError(const std::string & reason) : std::runtime_error(reason) {}
@@ -296,6 +334,8 @@ public:
 ///
 /// Typically arises when some API assumptions violated by user code
 /// extensions/implementation.
+///
+///\ingroup errors
 class UserAPIError : public RuntimeError {
 public:
     /// Accepts description of the error
@@ -303,6 +343,8 @@ public:
 };
 
 ///\brief `Documents::iLoader` implementation failed to fullfill some requirements
+///
+///\ingroup errors
 class LoaderAPIError : public UserAPIError {
 public:
     /// Pointer to the loader subclass instance that caused current API error
@@ -321,6 +363,8 @@ public:
 /// doesn't exist, access issue, etc).
 /// C/C++ does not define system-agnostic way to report on access error, so
 /// currently it is not very detailed error.
+///
+///\ingroup errors
 class IOError : public RuntimeError {
 public:
     /// Problematic filename
@@ -346,6 +390,8 @@ public:
 /// of the lexical or semantic issue appeared within file. Some ddetails missed
 /// by child classes constructors are mostly appended during unwinding of
 /// ty/catch blocks.
+///
+///\ingroup errors
 class ParserError : public RuntimeError {
 public:
     /// Buffer for formatted error message returned by `what()`
@@ -398,7 +444,10 @@ public:
 };
 
 
-/// Thrown, if no metadata can be found for certain key in the current file
+///\brief Thrown, if no metadata can be found for certain key in the
+///       current file
+///
+///\ingroup errors
 class NoMetadataEntryInFile : public ParserError {
 public:
     /// Name of the problematic parameter in metadata
@@ -412,7 +461,9 @@ public:
         {}
 };
 
-/// Thrown if metadata for certain key exists, but not before given line number
+///\brief Thrown if metadata for certain key exists, but not before given
+///       line number
+///\ingroup errors
 class NoCurrentMetadataEntry : public ParserError {
 public:
     /// Name of the problematic parameter in metadata
@@ -458,7 +509,9 @@ public:
 
 };
 
-/// Thrown if index fails to infer validity period for CSV block in file
+///\brief Thrown if index fails to infer validity period for CSV block in file
+///
+///\ingroup errors
 class NoValidityRange : public NoCurrentMetadataEntry {
 public:
     /// Expects presumed name of the validity range metadata tag and line
@@ -476,7 +529,9 @@ public:
         {}
 };
 
-/// Thrown if index fails to set data type for file
+///\brief Thrown if index fails to set data type for file
+///
+///\ingroup errors
 class NoDataTypeDefined : public NoCurrentMetadataEntry {
 public:
     /// Expects presumed name of the data type metadata tag and line
@@ -492,20 +547,24 @@ public:
                 ) {}
 };
 
-/// No calibration of certain type name defined (at all -- not just for
-/// certain run).
+///\brief No calibration of certain type name defined (at all -- not just for
+///       certain run).
+///
+///\ingroup errors
 class UnknownDataType : public RuntimeError {
 public:
     std::string typeName;
     UnknownDataType( const std::string tn )
-        : RuntimeError(std::string( "Unknown calibration data type: \"" + tn + "\"" ))
+        : RuntimeError(std::string( "No documents indexed for calibration data type: \"" + tn + "\"" ))
         , typeName(tn) {}
 };
 
-/// Unable to find calibration data for certain run number
+///\brief Unable to find calibration data for certain run number
 ///
 /// Thrown when single data entry is requested from index, but no instance can
 /// be found to correspond given validity key.
+///
+///\ingroup errors
 class NoCalibrationData : public RuntimeError {
 public:
     /// Type of interest for the query
@@ -520,8 +579,10 @@ public:
         , typeName(tn) {}
 };
 
-/// Thrown when user parser function requests column that was not defined
-/// in a metadata
+///\brief Thrown when user parser function requests column that was not defined
+///       in a metadata
+///
+///\ingroup errors
 class NoColumnDefinedForTable : public ParserError {
 public:
     /// Accepts name of the field of interest as problematic token
@@ -530,8 +591,10 @@ public:
                      , fieldName ) {}
 };
 
-/// Document referenced, but no handlers are capable to handle it are
-/// registered in current context
+///\brief Document referenced, but no handlers are capable to handle it are
+///       registered in current context
+///
+///\ingroup errors
 class NoLoaderForDocument : public RuntimeError {
 public:
     /// Identifier of the questionable document
@@ -545,6 +608,8 @@ public:
 
 /// Base class of overlappign regions exception; never thrown directly, but
 /// used to define overlapping regions errors within a file or between files.
+///
+///\ingroup errors
 class OverlappingRangesError : public RuntimeError {
 public:
     std::string dataType  ///< str name of the problematic data type
@@ -568,8 +633,10 @@ protected:
         {}
 };
 
-/// Thrown, when found prohibited overlapping regions within a file (may be
-/// disabled by the policy)
+///\brief found prohibited overlapping regions within a file (may be
+///       disabled by the policy)
+///
+///\ingroup errors
 class OverlappingRangesForDataTypeInFile : public OverlappingRangesError {
 public:
     /// Accepts details on the problematic entries in a file
@@ -582,8 +649,10 @@ public:
                 , thisEntryLineNo_, errMsg ) {}
 };
 
-/// Thrown, when found prohibited overlapping regions within a file (may be
-/// disabled by the policy)
+///\brief found prohibited overlapping regions within a file (may be
+///       disabled by the policy)
+///
+///\ingroup errors
 class OverlappingRangesForDataTypeInFiles : public OverlappingRangesError {
 public:
     /// Current problematic document ID
@@ -601,7 +670,9 @@ public:
         {}
 };
 
-/// A "nested" exception class, used for complex cases
+///\brief A "nested" exception class, used for complex cases
+///
+///\ingroup errors
 template<typename E1>
 class NestedError : public E1 {
 private:
@@ -625,20 +696,20 @@ public:
     }
 };
 
-}  // namespace errors
-
-template<typename ValidityKeyT> class Doc;  // fwd, TODO: do we need it?
+}  // namespace ::sdc::errors
 
 namespace aux {
 
 //                                         ___________________________________
 // ______________________________________/ Utility string processing functions
 
-/// Returns `true` if provided path matches wildcard expression
+///\brief Returns `true` if provided path matches wildcard expression
 ///
 /// A C++ wrapper over C `fnmatch()` (3) function.
 ///
 /// May throw `runtime_error()` in case of internal `fnmatch()` failure.
+///
+///\ingroup utils
 SDC_INLINE bool
 matches_wildcard( const std::string & pat
                 , const std::string & path
@@ -653,7 +724,9 @@ matches_wildcard( const std::string & pat
 }
 #endif
 
-/// Trims spaces from left and right of the line
+///\brief Trims spaces from left and right of the line
+///
+///\ingroup utils
 SDC_INLINE std::string
 trim(const std::string & strexpr ) SDC_ENDDECL
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
@@ -671,7 +744,9 @@ trim(const std::string & strexpr ) SDC_ENDDECL
 }
 #endif
 
-/// Helper function for tokenization
+///\brief Helper function for tokenization
+///
+///\ingroup utils
 SDC_INLINE std::list<std::string>
 tokenize(const std::string & expr, char delim) SDC_ENDDECL
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
@@ -692,7 +767,9 @@ tokenize(const std::string & expr, char delim) SDC_ENDDECL
 }
 #endif
 
-/// Helper function for tokenization (by spaces)
+///\brief Helper function for tokenization (by spaces)
+///
+///\ingroup utils
 SDC_INLINE std::list<std::string>
 tokenize(const std::string & expr) SDC_ENDDECL
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
@@ -704,7 +781,7 @@ tokenize(const std::string & expr) SDC_ENDDECL
 }
 #endif
 
-/// Reads next meaningful line from stream. Returns `false' on EOF
+///\brief Reads next meaningful line from stream. Returns `false' on EOF
 ///
 /// Used to obtain line from ASCII documents in line-based formats
 /// (like "extended" CSV).
@@ -722,6 +799,8 @@ tokenize(const std::string & expr) SDC_ENDDECL
 /// from comment.
 ///
 /// \todo Support for multiline comments (useful for Donskov's para-XML)
+///
+///\ingroup utils
 template<typename CommentCallableT>
 bool getline( std::istream & ifs
                    , std::string & buf
@@ -756,6 +835,8 @@ bool getline( std::istream & ifs
 // ___________________________________________________/ Lexical Cast Utilities
 
 ///\brief Returns `true` if given string expression looks like a numeric literal
+///
+///\ingroup utils
 inline bool
 is_numeric_literal( const std::string & s ) {
     if( 'n' == tolower(s[0]) && 'a' == tolower(s[1]) && 'n' == tolower(s[2])
@@ -779,13 +860,19 @@ is_numeric_literal( const std::string & s ) {
     #endif
 }
 
-/// Lexical cast traits; define to-/from- string conversions for various types
+///\brief Lexical cast traits; define to-/from- string conversions for various types
+///
+///\ingroup utils
 template<typename T, class=void> struct LexicalTraits;
 
-/// Own function for lexical cast. Meant to be used with specializations
+///\brief SDC's function for lexical cast. Meant to be used with specializations
+///
+///\ingroup utils
 template<typename T> T lexical_cast(const std::string & s);
 
-/// Specialization for STL string (trivial)
+///\brief Specialization for STL string (trivial)
+///
+///\ingroup utils
 template<> SDC_INLINE std::string
 lexical_cast<std::string>(const std::string & s) SDC_ENDDECL
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
@@ -794,7 +881,9 @@ lexical_cast<std::string>(const std::string & s) SDC_ENDDECL
 }
 #endif
 
-/// Specialization for boolean value
+///\brief Specialization for boolean value
+///
+///\ingroup utils
 template<> SDC_INLINE bool
 lexical_cast<bool>(const std::string & strexpr) SDC_ENDDECL
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
@@ -813,7 +902,9 @@ lexical_cast<bool>(const std::string & strexpr) SDC_ENDDECL
 }
 #endif
 
-/// Specialization for standard signed integer
+///\brief Specialization for standard signed integer
+///
+///\ingroup utils
 template<> SDC_INLINE int
 lexical_cast<int>(const std::string & strexpr) SDC_ENDDECL
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
@@ -829,7 +920,9 @@ lexical_cast<int>(const std::string & strexpr) SDC_ENDDECL
 }
 #endif
 
-/// Specialization for long unsigned integer
+///\brief Specialization for long unsigned integer
+///
+///\ingroup utils
 template<> SDC_INLINE unsigned long
 lexical_cast<unsigned long>(const std::string & strexpr) SDC_ENDDECL
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
@@ -845,7 +938,9 @@ lexical_cast<unsigned long>(const std::string & strexpr) SDC_ENDDECL
 }
 #endif
 
-/// Specialization for long unsigned integer
+///\brief Specialization for long unsigned integer
+///
+///\ingroup utils
 template<> SDC_INLINE long int
 lexical_cast<long int>(const std::string & strexpr) SDC_ENDDECL
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
@@ -861,8 +956,10 @@ lexical_cast<long int>(const std::string & strexpr) SDC_ENDDECL
 }
 #endif
 
-/// Specialization for single-precision floating point number (supports
-/// arithmetics)
+///\brief Specialization for single-precision floating point number (supports
+///       arithmetics)
+///
+///\ingroup utils
 template<> SDC_INLINE float
 lexical_cast<float>(const std::string & strexpr) SDC_ENDDECL
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
@@ -893,8 +990,10 @@ lexical_cast<float>(const std::string & strexpr) SDC_ENDDECL
 }
 #endif
 
-/// Specialization for single-precision floating point number (supports
-/// arithmetics)
+///\brief Specialization for single-precision floating point number (supports
+///       arithmetics)
+///
+///\ingroup utils
 template<> SDC_INLINE double
 lexical_cast<double>(const std::string & strexpr) SDC_ENDDECL
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
@@ -928,10 +1027,12 @@ lexical_cast<double>(const std::string & strexpr) SDC_ENDDECL
 
 // ... (other simple casts here)
 
-/// Specialization for runs range
+///\brief Specialization for runs range
 ///
 /// This pair is extremely important, so do some advanced checks and provide
 /// all the details on failure to assure we've set it properly
+///
+///\ingroup utils
 template<typename T>
 struct LexicalTraits< ValidityRange<T> > {
     static ValidityRange<T> from_string(const std::string & strexpr) {
@@ -996,11 +1097,16 @@ struct LexicalTraits< ValidityRange<T> > {
     }
 };
 
+///\brief Generic implementation of `lexical_cast<>()` based on STL
+///
+///\ingroup utils
 template<typename T> T lexical_cast(const std::string & s) {
     return LexicalTraits<T>::from_string(s);
 }
 
-/// An object wrapper over `lexical_cast<>()`
+///\brief An object wrapper over `lexical_cast<>()`
+///
+///\ingroup utils
 struct Value : public std::string {
     Value(const std::string & s) : std::string(s) {}
     template<typename T> operator T() const {
@@ -1029,6 +1135,8 @@ struct Value : public std::string {
 ///
 /// This function must be slightly more efficient for large maps than direct
 /// lookup, however it is used only for non-overlay strategy.
+///
+///\ingroup utils
 template<typename T> std::pair< typename T::const_iterator
                               , typename T::const_iterator
                               >
@@ -1045,7 +1153,9 @@ inv_eq_range( const T & m
     return p;
 }
 
-/// An utility metadata type for columns description
+///\brief An utility metadata type for columns description
+///
+///\ingroup utils
 struct ColumnsOrder : public std::unordered_map<std::string, int> {
     /// Auxiliary class representing semantically-parsed expression
     ///
@@ -1097,7 +1207,9 @@ struct ColumnsOrder : public std::unordered_map<std::string, int> {
     }
 };
 
-/// Parses columns order definition
+///\brief Parses columns order definition
+///
+///\ingroup utils
 template<> SDC_INLINE ColumnsOrder
 lexical_cast<ColumnsOrder>(const std::string & strexpr) SDC_ENDDECL
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
@@ -1124,6 +1236,7 @@ lexical_cast<ColumnsOrder>(const std::string & strexpr) SDC_ENDDECL
  * It is used in SDC to discover calibration files in directories.
  *
  * \note `input` array is assumed to be managed externally
+ * \ingroup utils
  * */
 class FTSBase {
 private:
@@ -1204,7 +1317,7 @@ FTSBase::FTSBase( char * const * input
         char * strerrResult =
             strerror_r(ftsOpenErrNo, ftsErrBuf, sizeof(ftsErrBuf));
         (void)strerrResult;  // supress warning on NDEBUG
-        assert(strerrResult == ftsErrBuf);  // todo: wut?
+        assert(strerrResult == ftsErrBuf);
         std::string errDetails(ftsErrBuf);
         errDetails = "fts_open() error: " + errDetails;
         size_t nByte = 0;
@@ -1224,7 +1337,7 @@ FTSBase::FTSBase( char * const * input
         char * strerrResult
             = strerror_r(ftsOpenErrNo, ftsErrBuf, sizeof(ftsErrBuf));
         (void) strerrResult;  // supress warning on NDEBUG
-        assert(strerrResult == ftsErrBuf);  // todo: wut?
+        assert(strerrResult == ftsErrBuf);
         std::string errDetails(ftsErrBuf);
         throw errors::IOError(ftsErrBuf, ftsErrBuf);
     }
@@ -1241,6 +1354,8 @@ FTSBase::FTSBase( char * const * input
  *
  * To find out why certain file was omitted, one may set public logstream
  * ptr for the instance.
+ *
+ * \ingroup utils
  * */
 class FS {
 protected:
@@ -1264,8 +1379,10 @@ protected:
         inline virtual ~FTSFiltered(){}
     };
 protected:
-    std::list<std::string> pathsList;
-    std::vector<const char *> paths;
+    std::list<std::string> _pathsList;
+    std::vector<const char *> _dirPaths;
+    std::vector<const char *>::const_iterator _cFileIt;
+    std::vector<const char *> _standaloneFiles;
     FTSFiltered * _fts;
 public:
     FS( const std::string & paths
@@ -1275,6 +1392,7 @@ public:
       );
 
     FS(const FS &);
+    //FS(FS &&);  // TODO?
 
     ~FS();
 
@@ -1287,8 +1405,11 @@ public:
     }
 
     std::string operator()() {
-        assert(_fts);  // TODO: consider a dedicated exception here
-        return (*_fts)();
+        std::string p;
+        if(_fts) p = (*_fts)();
+        if(!p.empty()) return p;
+        if( _cFileIt != _standaloneFiles.end() ) return *(_cFileIt++);
+        return "";
     }
 };  // class FS
 
@@ -1299,7 +1420,7 @@ FS::FTSFiltered::_fits( FTSENT * c ) const {
     //*logStreamPtr << "xxx " << filepath << std::endl;  // XXX
     if( ! FTSBase::_fits(c) ) {
         if( logStreamPtr )
-                *logStreamPtr << "...\"" << filepath
+                *logStreamPtr << "  \"" << filepath
                         << "\" not a file" << std::endl;
         return false;
     }
@@ -1307,14 +1428,14 @@ FS::FTSFiltered::_fits( FTSENT * c ) const {
     {  // size
         if( fileSizeMin && fileSizeMin > c->fts_statp->st_size ) {
             if( logStreamPtr )
-                *logStreamPtr << "...file \"" << filepath
+                *logStreamPtr << "  file \"" << filepath
                         << "\" too small (" << c->fts_statp->st_size
                         << "b < " << fileSizeMin << std::endl;
             return false;  // file too small
         }
         if( fileSizeMax && fileSizeMax < c->fts_statp->st_size ) {
             if( logStreamPtr )
-                *logStreamPtr << "...file \"" << filepath
+                *logStreamPtr << "  file \"" << filepath
                         << "\" too big (" << c->fts_statp->st_size
                         << "b > " << fileSizeMin << std::endl;
             return false;  // file too big
@@ -1326,7 +1447,7 @@ FS::FTSFiltered::_fits( FTSENT * c ) const {
             doAccept |= aux::matches_wildcard(accPat, filepath);
             if(doAccept) {
                 if( logStreamPtr )
-                    *logStreamPtr << "...file \"" << filepath
+                    *logStreamPtr << "  file \"" << filepath
                             << "\" accepted by pattern \"" << accPat
                             << "\"" << std::endl;
                 break;
@@ -1334,7 +1455,7 @@ FS::FTSFiltered::_fits( FTSENT * c ) const {
         }
         if(!doAccept) {
             if( logStreamPtr )
-                    *logStreamPtr << "...file \"" << filepath
+                    *logStreamPtr << "  file \"" << filepath
                             << "\" did not fit any \"accept\" pattern"
                             << std::endl;
             return false;  // hasn't been accepted by pattern
@@ -1343,7 +1464,7 @@ FS::FTSFiltered::_fits( FTSENT * c ) const {
             doAccept &= !aux::matches_wildcard(rejPat, filepath);
             if(!doAccept) {
                 if( logStreamPtr )
-                    *logStreamPtr << "...file \"" << filepath
+                    *logStreamPtr << "  file \"" << filepath
                             << "\" rejected by pattern \"" << rejPat
                             << "\"" << std::endl;
                 break;
@@ -1352,7 +1473,7 @@ FS::FTSFiltered::_fits( FTSENT * c ) const {
         if(!doAccept) return false;  // rejected by pattern
     }
     if( logStreamPtr )
-        *logStreamPtr << "=> file \"" << filepath
+        *logStreamPtr << "    file \"" << filepath
                 << "\" accepted" << std::endl;
     return true;
 }
@@ -1366,59 +1487,84 @@ FS::FS( const std::string & paths_
       , ::off_t fileSizeMin, ::off_t fileSizeMax
       ) {
     // tokenize paths and, if need, patterns
-    pathsList = aux::tokenize(paths_, ':');
+    _pathsList = aux::tokenize(paths_, ':');
+
     std::list<std::string> acceptList
                          , rejectList
                          ;
     if( !acceptPatterns.empty() ) acceptList = aux::tokenize(acceptPatterns, ':');
     if( !rejectPatterns.empty() ) rejectList = aux::tokenize(rejectPatterns, ':');
+    #if 1
+    for(std::string & cpath : _pathsList) {
+        if(cpath.empty()) continue;
+        struct stat cPathStat;
+        stat(cpath.c_str(), &cPathStat);  // also follows symlinks
+        switch( cPathStat.st_mode & S_IFMT ) {
+            case S_IFDIR : _dirPaths.push_back(cpath.c_str()); break;
+            case S_IFREG : _standaloneFiles.push_back(cpath.c_str()); break;
+            default:
+                std::cerr << "Ignoring path \"" << cpath
+                    << "\" (not a file or directory." << std::endl;
+                // ^^^ TODO: redirect warning
+        };
+    }
+    #else
     std::transform( pathsList.begin(), pathsList.end()
                   , std::back_inserter(paths)
                   , []( const std::string & stls ) { return stls.c_str(); }
                   );
-    paths.push_back(NULL);  // sentinel for `fts_open()'
-    // Instantiate FTS wrapper object
-    _fts = new FTSFiltered( const_cast<char * const *>(paths.data())
-                        // ^^^ todo: why does it return `const char **` instead
-                        //     of `const char * const *` ?
-                        , (fileSizeMin | fileSizeMax) ? 0 : FTS_NAMEONLY
-                        );
-    // set patterns and sizes
-    _fts->acceptPatterns
-        = std::vector<std::string>(acceptList.begin(), acceptList.end());
-    _fts->rejectPatterns
-        = std::vector<std::string>(rejectList.begin(), rejectList.end());
-    _fts->fileSizeMin = fileSizeMin;
-    _fts->fileSizeMax = fileSizeMax;
+    #endif
+    _dirPaths.push_back(NULL);  // sentinel for `fts_open()'
+    _cFileIt = _standaloneFiles.begin();
+    if( _dirPaths.size() > 1 ) {
+        // Instantiate FTS wrapper object
+        _fts = new FTSFiltered( const_cast<char * const *>(_dirPaths.data())
+                            // ^^^ todo: why does it return `const char **` instead
+                            //     of `const char * const *` ?
+                            , (fileSizeMin | fileSizeMax) ? 0x0 : FTS_NAMEONLY
+                            );
+        // set patterns and sizes
+        _fts->acceptPatterns
+            = std::vector<std::string>(acceptList.begin(), acceptList.end());
+        _fts->rejectPatterns
+            = std::vector<std::string>(rejectList.begin(), rejectList.end());
+        _fts->fileSizeMin = fileSizeMin;
+        _fts->fileSizeMax = fileSizeMax;
+    } else {
+        _fts = nullptr;
+    }
 }
 #endif
 
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 SDC_INLINE
-FS::FS(const FS & o) : pathsList(o.pathsList)
+FS::FS(const FS & o) : _pathsList(o._pathsList)
                      , _fts(nullptr)
                      {
-    assert(!o.paths.empty());
-    // Copy paths vector
-    for( auto pPtr : o.paths ) {
-        if( (!pPtr) || '\0' == *pPtr ) {
-            paths.push_back(nullptr);
-            continue;
+    std::unordered_set<std::string> files( o._standaloneFiles.begin()
+                                         , o._standaloneFiles.end() );
+    for(const std::string & cptok : _pathsList) {
+        if(cptok.empty()) continue;
+        if(files.find(cptok) == files.end()) {
+            _dirPaths.push_back(cptok.c_str());
+        } else {
+            _standaloneFiles.push_back(cptok.c_str());
         }
-        char * pCpy = new char [strlen(pPtr) + 1];
-        strcpy(pCpy, pPtr);
-        paths.push_back(pCpy);
     }
-    // Create FTS instance
-    _fts = new FTSFiltered( const_cast<char * const *>(paths.data())
-                          , (o._fts->fileSizeMin | o._fts->fileSizeMax) ? 0 : FTS_NAMEONLY
-                          );
-    _fts->logStreamPtr = o._fts->logStreamPtr;
-    // set patterns and sizes
-    _fts->acceptPatterns = o._fts->acceptPatterns;
-    _fts->rejectPatterns = o._fts->rejectPatterns;
-    _fts->fileSizeMin = o._fts->fileSizeMin;
-    _fts->fileSizeMax = o._fts->fileSizeMax;
+    _dirPaths.push_back(NULL);
+    _cFileIt = _standaloneFiles.begin();
+    if( _dirPaths.size() > 1 ) {
+        // Create FTS instance
+        _fts = new FTSFiltered( const_cast<char * const *>(_dirPaths.data())
+                              , (o._fts->fileSizeMin | o._fts->fileSizeMax) ? 0x0 : FTS_NAMEONLY
+                              );
+        _fts->logStreamPtr = o._fts->logStreamPtr;
+        // set patterns and sizes
+        _fts->acceptPatterns = o._fts->acceptPatterns;
+        _fts->rejectPatterns = o._fts->rejectPatterns;
+        _fts->fileSizeMin = o._fts->fileSizeMin;
+        _fts->fileSizeMax = o._fts->fileSizeMax;
+    }
 }
 #endif
 
@@ -1433,11 +1579,13 @@ FS::~FS() {
 //                                                              _______________
 // ___________________________________________________________/ Metadata Index
 
-/// A dictionary of file's meta information
+///\brief A dictionary of file's meta information
 ///
 /// Provides indexing and caching utilities to keep and retrieve metadata
 /// entries of various types. Caches results to avoid re-creation of the
 /// complex types (like TFormula).
+///
+///\ingroup indexing
 struct MetaInfo
     : protected std::unordered_multimap< std::string
                                        , std::pair<size_t, std::string>
@@ -1505,9 +1653,6 @@ public:
     /// \brief Retrieves a value by key from the metadata (defined before
     /// certain line number)
     ///
-    /// Throws `NoMetadataEntry` or `NoCurrentMetadataEntry` error if no
-    /// values(s) found.
-    ///
     /// The `lineNo' parameter means that, in case of names collision, only
     /// entry that is on that line or line before will be considered. This is
     /// done to handle cases, when values of the metadata are overriden within
@@ -1515,10 +1660,17 @@ public:
     ///
     /// If `foundLineNo` ptr is provided, it will be set to the found entry,
     /// if any.
+    ///
+    /// \throws `sdc::errors::NoMetadataEntry` error if no values(s) found.
+    /// \throws `sdc::errors::NoCurrentMetadataEntry` if no value(s) found for line
     std::string get_strexpr( const std::string & name
                            , size_t lineNo=std::numeric_limits<size_t>::max()
                            , size_t * foundLineNo=nullptr
                            ) const {
+        if( std::numeric_limits<size_t>::max() == lineNo
+         && name != "@lineNo" ) {
+            lineNo = this->get<size_t>("@lineNo");
+        }
         const auto vs = this->operator[](name);
         if( vs.empty() ) {
             // no metadata with such key is defined in file (at all)
@@ -1536,18 +1688,24 @@ public:
     ///\brief Retrieves a value by key from the metadata and performs lexical
     ///       cast.
     ///
-    /// Throws `NoMetadataEntry` or `NoCurrentMetadataEntry` errors if no
-    /// values(s) found. Can throw other exceptions on the lexical cast
-    /// failure.
-    ///
     /// Locates the metadata variable by forwards call to non-template
     /// `meta_value()` method and tries to return a cached value of
     /// this type. If no cache found, does a lexical
     /// cast on the entry using `ValueTraits` and updates the cache.
+    ///
+    /// Can also propagate excpetions from `lexical_cast<>()`.
+    ///
+    /// \throws `sdc::errors::NoMetadataEntry` error if no values(s) found.
+    /// \throws `sdc::errors::NoCurrentMetadataEntry` if no value(s) found for line
     template<typename T> T
-    get( const std::string & name, size_t lineNo ) const {
+    get( const std::string & name
+       , size_t lineNo=std::numeric_limits<size_t>::max() ) const {
         size_t lFound = 0;
         auto strexpr = this->get_strexpr(name, lineNo, &lFound);
+        if((!name.empty()) && name[0] == '@' ) {
+            // do not cache items starting with `@'
+            return lexical_cast<T>(strexpr);
+        }
         // try to retrieve the cache
         const CacheKey k = CacheKey{name, lFound, typeid(T)};
         auto cacheIt = _cache.find(k);
@@ -1558,6 +1716,11 @@ public:
             assert(ir.second);
             cacheIt = ir.first;
         }
+        #ifndef NDEBUG
+        // in debug build, make sure we have same cached value
+        assert( static_cast<MetaInfoCachedValue<T>*>(cacheIt->second.get())->value
+             == lexical_cast<T>(strexpr) );
+        #endif
         return static_cast<MetaInfoCachedValue<T>*>(cacheIt->second.get())->value;
     }
 
@@ -1595,7 +1758,20 @@ public:
         emplace(name, std::pair<size_t, std::string>(lineNo, value));
     }
 
-    template<typename ValidityKeyT> friend class ::sdc::Doc;
+    void drop( const std::string & name
+             , size_t lineNo=std::numeric_limits<size_t>::min() ) {
+        // drop() is not something one uses often, so sub-optimal performance
+        // here should be fine...
+        //std::erase_if(_cache, [&name](const auto & cacheItem {
+        //                return std::get<0>(cacheItem.first) == name)
+        //            }));
+        for(auto it = _cache.begin(); it != _cache.end(); ) {
+            if(std::get<0>(it->first) == name) {
+                _cache.erase(it++);
+            } else ++it;
+        }
+        Parent::erase(name);
+    }
 };  // class MetaInfo
 
 #if 0  // TODO?
@@ -1642,6 +1818,8 @@ template<typename KeyT> class Documents;  // fwd
  *
  * Must be parameterised with validity key type (e.g. run number or time+date)
  * and type of user info kept.
+ *
+ * \ingroup typed indexing
  * */
 template< typename KeyT
         , typename AuxInfoT
@@ -1709,7 +1887,7 @@ public:
      * returns an empty list if no calibration data type can be retrieved.
      * (yet, if type exists, but no data present no exception thrown anyway).
      *
-     * \throws `errors::UnknownDataType` if not such data type defined.
+     * \throws `sdc::errors::UnknownDataType` if not such data type defined.
      * */
     Updates updates( const std::string & typeName
                    , KeyT key
@@ -1721,7 +1899,10 @@ public:
             throw errors::UnknownDataType(typeName);
         }
         Updates us;
+        // locate latest item for certain key
         auto upb = typeIt->second.upper_bound(key);
+        // iterate till the item, omitting entries that are not currently
+        // valid, put valid entries into updates list
         for( auto it = typeIt->second.begin()
            ; it != upb
            ; ++it ) {
@@ -1781,9 +1962,9 @@ public:
      * In case of few valid entries found for certain run, the latest
      * inserted will be returned.
      *
-     * \throws `errors::UnknownDataType` if not such data type defined and
+     * \throws `sdc::errors::UnknownDataType` if not such data type defined and
      *         `noTypeIsOk` is false.
-     * \throws `errors::NoData` if no valid data can be found for given key
+     * \throws `sdc::errors::NoData` if no valid data can be found for given key
      *
      * \todo Optimize me. Lookup loop seems to be suboptimal.
      */
@@ -1836,16 +2017,20 @@ template<typename T> struct CalibDataTraits;
  * document -- line number, cached ID of database entry, etc.
  *
  * \note Has few public collections that must be set prior to usage
+ * \ingroup indexing
  * */
 template<typename KeyT>
 class Documents {
 public:
-    /// Description of the data block found in document
+    /// Description of the data block found in the document
     struct DataBlock {
         /// Data type provided by block described
         std::string dataType;
         /// Validity range for described block
         ValidityRange<KeyT> validityRange;
+        /// Line number of data block start (or other internal markup marker
+        /// encoded)
+        IntradocMarkup_t blockBgn;
     };
 
     /**\brief A document reader of certain format
@@ -1867,7 +2052,6 @@ public:
         /// A callback function type, performing reading of the string
         /// expression into calibration data type
         typedef std::function< bool ( const typename aux::MetaInfo &
-                                    , size_t
                                     , const std::string & )
                              > ReaderCallback;
         ///\brief Externally set validity defaults for the loader
@@ -1919,42 +2103,54 @@ public:
          * data block within a doc provides no validity range, `NoValidityRange`
          * exception is thrown.
          *
-         * \param ifs stream to read
-         * \param k validity id
+         * \param docID document identifier to read
+         * \param k validity ID
          * \param forType blocks of this only type will be read
-         * \param ai aux info 
+         * \param acceptFrom inter-document markup identifying section to read
          * \param cllb callable object to forward line parsing to
          */
         virtual void read_data( const std::string & docID
                               , KeyT k
                               , const std::string & forType
-                              , ReaderCallback
+                              , IntradocMarkup_t acceptFrom
+                              , ReaderCallback cllb
                               ) = 0;
     };
 
     /// Colllection of loaders, capable to obtain structures
     std::list< std::shared_ptr<iLoader> > loaders;
     /// Data block snapshot with cached loader handle to read it
-    struct DocumentEntry {
+    struct DocumentLoadingState {
+        /// Loader settings at the current parser state
         typename iLoader::Defaults defaults;
+        /// Pointer to loader in use
         std::shared_ptr<iLoader> loader;
+        /// Last block start marker
+        IntradocMarkup_t dataBlockBgn;
     };
     /// Index of documents with polymorphic aux info
-    ValidityIndex<KeyT, DocumentEntry> validityIndex;
+    ValidityIndex<KeyT, DocumentLoadingState> validityIndex;
 
-    typedef typename ValidityIndex<KeyT, DocumentEntry>::Updates::value_type Update;
+    typedef typename ValidityIndex<KeyT, DocumentLoadingState>::Updates::value_type Update;
 public:
     // TODO: doc
     template<typename T> void
     load_update_into( const typename ValidityIndex< KeyT
-                                                  , DocumentEntry
+                                                  , DocumentLoadingState
                                                   >::Updates::value_type upd
                     , typename CalibDataTraits<T>::template Collection<> & dest
                     ) const {
-        auto docEntryPtr = upd.second;  // ValidityIndex::DocumentEntry<...>
-        auto docHandlerPtr = docEntryPtr->auxInfo.loader;
-        auto dftsBck = docHandlerPtr->defaults;
-        docHandlerPtr->defaults = docEntryPtr->auxInfo.defaults;
+        // doc entry to read (has docID, valid-to, auxinfo which is of this
+        // class' DocumentLoadingState -- defaults+loader )
+        const typename ValidityIndex<KeyT, DocumentLoadingState>::DocumentEntry *
+            docEntryPtr = upd.second;
+        // particular loader ptr
+        iLoader *
+            docHandlerPtr = docEntryPtr->auxInfo.loader.get();
+        // copy of loader's defaults to be restored
+        const typename iLoader::Defaults
+            dftsBck = docHandlerPtr->defaults;
+        docHandlerPtr->defaults = dftsBck;
         // Here static and dynamic polymorphism join.
         // We use C++ lambda function to make runtime-polymorphic handler
         // to read the data into statically-derived data structure.
@@ -1962,26 +2158,23 @@ public:
             docHandlerPtr->read_data( docEntryPtr->docID
                   , upd.first
                   , CalibDataTraits<T>::typeName
+                  , docEntryPtr->auxInfo.dataBlockBgn
                   , [&]( const typename aux::MetaInfo & meta
-                       , size_t lineNo
                        , const std::string & expression ) {
                             try {
                                 CalibDataTraits<T>::collect( dest
-                                        , CalibDataTraits<T>::parse_line(
-                                                expression
-                                              , lineNo
-                                              , meta
-                                              , docEntryPtr->docID
-                                              )
+                                        , CalibDataTraits<T>::parse_line(expression, meta)
                                         , meta
-                                        , lineNo
                                         );
                             } catch( errors::RuntimeError & e ) {
                                 throw errors::NestedError<errors::ParserError>( e
                                     , "while parsing or collecting data block"
                                     , expression
                                     , docEntryPtr->docID
-                                    , lineNo );
+                                    , meta.get<size_t>("@lineNo"
+                                        , std::numeric_limits<size_t>::max()
+                                        , std::numeric_limits<size_t>::max()
+                                        ) );
                             }
                             return true;
                         }
@@ -2066,7 +2259,7 @@ public:
                                        , block.dataType  // data type
                                        , block.validityRange.from
                                        , block.validityRange.to
-                                       , DocumentEntry{loader->defaults, loader}
+                                       , DocumentLoadingState{loader->defaults, loader, block.blockBgn }
                                        );
             }
             loader->defaults = prevDfts;
@@ -2271,6 +2464,8 @@ struct SrcInfo {
  * returns by adding a filename for every entry considered. Post-processing
  * function that makes a resulting vector of entries will then assure that all
  * the cells of same name came from same file.
+ *
+ * \ingroup type-traits
  * */
 template<typename T>
 struct CalibDataTraits< SrcInfo<T> > {
@@ -2284,21 +2479,18 @@ struct CalibDataTraits< SrcInfo<T> > {
     static inline void collect( Collection<TT> & c
                               , const SrcInfo<T> & e
                               , const aux::MetaInfo & mi
-                              , size_t ll
                               ) { 
-        CalibDataTraits<T>::template collect<SrcInfo<T>>(c, e, mi, ll);
+        CalibDataTraits<T>::template collect<SrcInfo<T>>(c, e, mi);
     }
     /// Forwards call to wrapped traits
     static SrcInfo<T>
     parse_line( const std::string & line
-              , size_t lineNo
-              , const aux::MetaInfo & m
-              , const std::string & filename
+              , const aux::MetaInfo & mi
               ) {
         return SrcInfo<T>{
-                  CalibDataTraits<T>::parse_line(line, lineNo, m, filename)
-                , lineNo
-                , filename
+                  CalibDataTraits<T>::parse_line(line, mi)
+                , mi.get<size_t>("@lineNo")
+                , mi.get<std::string>("@sourceID", "(undefined)")
                 };
     }
 };
@@ -2343,6 +2535,8 @@ struct CalibDataTraits< SrcInfo<T> > {
  * Essentially, boundaries between CSV blocks are defined by validity metadata
  * definition. Except for this, each CSV block inherits values from above,
  * meaning that `key1` and `key2` will be defined for both block#1 and block#2.
+ *
+ * \ingroup utils
  * */
 template<typename KeyT>
 class ExtCSVLoader : public Documents<KeyT>::iLoader {
@@ -2365,7 +2559,7 @@ public:
         virtual std::pair<size_t, size_t> handle_comment( const std::string & line ) = 0;
         /// Shall try to treat the given line as metadata and return whether it
         /// is a line with metadata
-        virtual bool handle_metadata( const std::string & line, size_t lineNo ) = 0;
+        virtual uint32_t handle_metadata( const std::string & line, size_t lineNo ) = 0;
         /// Handles CSV line
         virtual bool handle_csv(const std::string & line, size_t lineNo) = 0;
         /// Handles CSV block start
@@ -2410,22 +2604,27 @@ public:
         }
         /// We currently look only for validity key and data type metadata,
         /// if provided by current grammar settings or defaults
-        bool handle_metadata( const std::string & line, size_t lineNo ) override {
-            if( '\0' == g.metadataMarker ) return false;
+        uint32_t handle_metadata( const std::string & line, size_t lineNo ) override {
+            uint32_t rCode = 0x0;
+            if( '\0' == g.metadataMarker ) return rCode;
             auto eqP = line.find( g.metadataMarker );
-            if( eqP == std::string::npos ) return false;
+            if( eqP == std::string::npos ) return rCode;
             const std::string key = aux::trim(line.substr(0, eqP));
-
+            
+            rCode |= 0x1;
             if( (!g.metadataKeyTag.empty())
              && key == g.metadataKeyTag ) {
                 validity
                     = aux::LexicalTraits< ValidityRange<KeyT> >
                          ::from_string( line.substr(eqP + 1));
-            } else if( (!g.metadataTypeTag.empty())
+                rCode |= 0x2;
+            }
+            if( (!g.metadataTypeTag.empty())
                     && key == g.metadataTypeTag ) {
                 type = aux::trim(line.substr(eqP + 1));
+                rCode |= 0x2;
             }
-            return true;
+            return rCode;
         }
         /// Does nothing
         bool handle_csv(const std::string &, size_t) override { return true; }
@@ -2434,7 +2633,7 @@ public:
             // TODO: handle defaults
             // Assure the data type / validity range are set (or
             // take defaults)
-            typename Documents<KeyT>::DataBlock db {type, validity};
+            typename Documents<KeyT>::DataBlock db {type, validity, lineNo};
             if( db.dataType.empty() ) {
                 db.dataType = type;
             }
@@ -2496,24 +2695,28 @@ public:
         }
 
         /// Full support for the metadata
-        bool handle_metadata( const std::string & line, size_t lineNo ) override {
-            if( '\0' == g.metadataMarker ) return false;
+        uint32_t handle_metadata( const std::string & line, size_t lineNo ) override {
+            uint32_t r = 0x0;
+            if( '\0' == g.metadataMarker ) return r;
             auto eqP = line.find( g.metadataMarker );
-            if( eqP == std::string::npos ) return false;
+            if( eqP == std::string::npos ) return r;
             const std::string key = aux::trim( line.substr(0, eqP) )
                             , val = aux::trim( line.substr(eqP + 1) )
                             ;
             md.set( key, val, lineNo );
+            r |= 0x1;
             if( (!g.metadataKeyTag.empty())
              && g.metadataKeyTag == key ) {
                 cVal = aux::LexicalTraits< ValidityRange<KeyT> >
                         ::from_string(val);
+                r |= 0x2;
             }
             if( (!g.metadataTypeTag.empty())
              && g.metadataTypeTag == key ) {
                 cType = val;
+                r |= 0x2;
             }
-            return true;
+            return r;
         }
         /// Forwards execution to data parsing callable for the range that must
         /// be read
@@ -2525,37 +2728,55 @@ public:
               && forKey < cVal.from ) return true;  // not valid yet
             if( ValidityTraits<KeyT>::is_set(cVal.to)
               && (cVal.to < forKey || cVal.to == forKey ) ) return true;  // not valid already
-            return cllb(md, lineNo, line);
+            char bf[32];
+            snprintf(bf, sizeof(bf), "%zu", lineNo);
+            md.set("@lineNo", bf);
+            assert(md.get<size_t>("@lineNo") == lineNo);
+            bool ret = cllb(md, line);
+            assert(md.get<size_t>("@lineNo") == lineNo);
+            md.drop("@lineNo");
+            return ret;
         }
         /// Does nothing
         void handle_csv_start(size_t lineNo) override {}
-    };
+    };  // struct ParsingState
 protected:
     /// Aux function iterating over CSV/SDC lines in stream
     size_t _parse_stream( std::istream & inputStream
                         , iState & state
+                        , IntradocMarkup_t acceptCSVFromLine
                         ) {
+        // This is the most important method of (pre-)parsing the documents;
+        // it steers the logic of indexing CSV blocks wrt document structure.
         std::string line;
         size_t lineCount = 0;
-        bool lastWasCSV = false;  // flag to follow contiguous CSV block
+        bool indexNextCSVLine = true;
+        // read next line:
         while( aux::getline( inputStream, line, lineCount
                     , [&](const std::string & l){return state.handle_comment(l);}
                     ) ) {
-            if( state.handle_metadata(line, lineCount) ) {
-                lastWasCSV = false;  // break up the CSV block
-                // FIXME quirk: since any metadata line splits
-                //       CSV blocks, it will load both blocks twice. It is not a
-                //       bug per se, but rather a unforseen behaviour that must be
-                //       eliminated by re-desigining reading loop...
+            // by default we assume new line being read to be metadata
+            // expression, `handle_metadata()` accepts line and should test it
+            // against "is metadata" condition. If the result of metadata
+            // treatment suceed (0x1 flag set), further line treatment is
+            // blocked. Additionally, if processed metadata is of runs range
+            // type (0x2 flag is set in return code), we should break the
+            // document and make next (first) CSV line to be indexed.
+            uint32_t mdFlags = state.handle_metadata(line, lineCount);
+            if( mdFlags ) {
+                if(mdFlags & 0x2) indexNextCSVLine = true;
                 continue;
             }
+            if(lineCount < acceptCSVFromLine) continue;  // omit irrelevant CSV
             if( ! state.handle_csv(line, lineCount) ) {
                 continue;  // not a CSV
             }
-            if( !lastWasCSV ) {
-                // memorize the new CSV block start
+            if( indexNextCSVLine ) {
+                // One gets here only if current line is CSV and
+                // `indexNextCSVLine' is set -- memorize the new CSV block
+                // start
                 state.handle_csv_start(lineCount);
-                lastWasCSV = true;
+                indexNextCSVLine = false;
             }
         }
         return lineCount;
@@ -2577,7 +2798,7 @@ public:  // iLoader interface implementation
                              , this->defaults.validityRange
                              , this->defaults.dataType
                              );
-        _parse_stream( ifs, state );
+        _parse_stream( ifs, state, 0 );
         return state.r;
     }
 
@@ -2596,7 +2817,15 @@ public:  // iLoader interface implementation
         if(!ifs.good()) {
             throw errors::IOError(docID, "could not create input stream");
         }
-        return get_doc_struct(ifs);
+        this->defaults.baseMD.set( "@docID"
+                                 , docID
+                                 , std::numeric_limits<size_t>::max()
+                                 );
+        auto r = get_doc_struct(ifs);
+        this->defaults.baseMD.drop( "@docID"
+                                  , std::numeric_limits<size_t>::max()
+                                  );
+        return r;
     }
     
     /** Stream version of data block reading
@@ -2607,6 +2836,7 @@ public:  // iLoader interface implementation
     void read_data( std::istream & ifs
                   , KeyT k
                   , const std::string & forType
+                  , IntradocMarkup_t acceptCSVFromLine
                   , typename Documents<KeyT>::iLoader::ReaderCallback cllb
                   ) {
         ParsingState state( grammar
@@ -2617,7 +2847,7 @@ public:  // iLoader interface implementation
                           , cllb
                           , this->defaults.baseMD
                           );
-        _parse_stream( ifs, state );
+        _parse_stream( ifs, state, acceptCSVFromLine );
     }
 
     /** Opens file and forwards parsing to stream version.
@@ -2630,13 +2860,84 @@ public:  // iLoader interface implementation
     void read_data( const std::string & docID
                   , KeyT k
                   , const std::string & forType
+                  , IntradocMarkup_t acceptCSVFromLine
                   , typename Documents<KeyT>::iLoader::ReaderCallback cllb
                   ) override {
         // open file (closed by its destructor at exit)
         std::ifstream ifs(docID);
-        read_data( ifs, k, forType, cllb );
+        this->defaults.baseMD.set( "@docID"
+                                 , docID
+                                 , std::numeric_limits<size_t>::max()
+                                 );
+        read_data( ifs, k, forType, acceptCSVFromLine, cllb );
+        this->defaults.baseMD.drop( "@docID"
+                                  , std::numeric_limits<size_t>::max()
+                                  );
     }
 };
+
+/**\brief Load items of certain type for certain validity key
+ *
+ * This function is handy for certain (ad hoc) cases, albeit it must not be
+ * used for large applications as it does not benefit from reentrant indeces
+ * and persistent data structures.
+ *
+ * \ingroup utils
+ * */
+template<typename KeyT, typename DataTypeT>
+typename CalibDataTraits<DataTypeT>::template Collection<DataTypeT>
+load_from_fs( const std::string & rootpath
+            , KeyT k
+            , const std::string & acceptPatterns="*.txt:*.dat"
+            , const std::string & rejectPatterns="*.swp:*.swo:*.bak:*.BAK:*.bck:~*:*-orig.txt:*.dev"
+            , size_t upSizeLimitBytes=1024*1024*1024
+            , std::ostream * logStreamPtr=&std::cout//nullptr
+            ) {
+    // 1. SETUP
+    // create calibration document index by run number
+    sdc::Documents<KeyT> docs;
+    // Create a loader object and add it to the index for automated binding.
+    // This type of loader (ExtCSVLoader) is pretty generic one and implies
+    // a kind of "extended" grammar for CSV-like files.
+    auto extCSVLoader = std::make_shared< sdc::ExtCSVLoader<KeyT> >();
+    docs.loaders.push_back(extCSVLoader);
+    // ^^^ one can customize this loader's grammar by modifying its public
+    //     `grammar` attribute or its defaults. For instance, we assume all the
+    //     discovered files to have `CaloCellCalib` data type by default:
+    extCSVLoader->defaults.dataType = CalibDataTraits<DataTypeT>::typeName;
+
+    // create filesystem iterator to walk through all the dirs and their
+    // subdirs looking for files matching certain wildcards and size criteria
+    sdc::aux::FS fs( rootpath
+                   , acceptPatterns // (opt) accept patterns
+                   , rejectPatterns // (opt) reject patterns
+                   , 10  // (opt) min file size, bytes
+                   , upSizeLimitBytes  // (opt) max file size, bytes
+                   );
+    if(logStreamPtr) {
+        fs.set_logstream(&std::cout);
+    }
+    // use this iterator to fill documents index by recursively traversing FS
+    // subtree and pre-parsing all matching files
+    size_t nDocsOnIndex = docs.add_from(fs);
+    if(logStreamPtr) {
+        std::cout << "Indexed " << nDocsOnIndex << " document(s) at "
+            << rootpath
+            << " (accept=\"" << acceptPatterns << "\", reject=\""
+            << rejectPatterns << ", size=(10-" << upSizeLimitBytes << ")."
+            << std::endl;
+    }
+
+    // 2. LOAD DATA FOR CERTAIN RUN ID
+    // We now load the data into collection.
+    // Usually, when no origin info is required for the data being fetched,
+    // one can simply call `docs.load<CustomDataType>(runNo)` and that's it.
+    // However, for `CaloCellCalib` it is requested to apply additional check
+    // on the origin, so we use a templated wrapper `SrcInfo<T>` here to
+    // gain some info on the source document for every entry.
+    return docs.template load< DataTypeT >(k);
+}
+
 
 }  // namespace sdc
 

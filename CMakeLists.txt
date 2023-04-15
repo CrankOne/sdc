@@ -66,6 +66,10 @@ if (BUILD_TESTS)
     # Discovery test
     add_executable (sdc-discover tests/discover.cc)
     target_link_libraries (sdc-discover ${sdc_LIB})
+
+    add_executable (sdc-example-1 tests/tutorial/main-1.cc)
+    target_link_libraries (sdc-example-1 ${sdc_LIB})
+
     if (COVERAGE)
         set (CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
         include (CodeCoverage)

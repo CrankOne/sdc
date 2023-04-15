@@ -33,25 +33,21 @@ struct CalibDataTraits<Foo> {
     // tokenization and trimming of the string line, but you can rely on your
     // own.
     static Foo parse_line( const std::string & line
-                         , size_t lineNo
                          , const aux::MetaInfo & mi
-                         , const std::string & filename
                          ) {
         // insantiate new calib data item to fill
         Foo item;
         // one can query metadata valid for current CSV block as following.
-        int someFactor = mi.get<int>("someFactor", lineNo);
+        int someFactor = mi.get<int>("someFactor");
 
         // If TFormula supported:
-        float factor = mi.get<double>("someFactor", std::nan("0"), lineNo );
+        float factor = mi.get<double>("someFactor", std::nan("0"));
 
         item.formulaResult = mi.get<double>("someFormula", std::nan("0"));
 
-        std::cout << " xxx " << lineNo << " : " << factor << " formula=" << item.formulaResult << std::endl;  // XXX
-
         // Use columns tokenization helper from SDC to split the line on
         // key/value pairs by using `columns=` metadata:
-        auto values = mi.get<aux::ColumnsOrder>("columns", lineNo)
+        auto values = mi.get<aux::ColumnsOrder>("columns")
                 .interpret(aux::tokenize(line));
         // fill the calibration entry item. Syntax of the `()` requires
         // the "column name" and permits for optional "default" value. Here
@@ -80,7 +76,6 @@ struct CalibDataTraits<Foo> {
     static void collect( Collection<T> & dest
                        , const T & newEntry
                        , const aux::MetaInfo &  // you can use metainfo
-                       , size_t  // line number
                        ) { dest.push_back(newEntry); }
     // ^^^ alternatively, for your `Collection=std::map<std::string, T>, use
     // for instance:
@@ -117,7 +112,7 @@ main(int argc, char * argv[]) {
     // This method has number of useful, bot non-mandatory args for defaults:
     // default data type, default validity range, supplementary metadata to 
     // be provided to the parser, etc
-    bool added = docs.add("../tests/assets/one.txt");
+    bool added = docs.add("../tests/assets/test1/one.txt");
     assert(added);  // check that file was added
 
     // Usage

@@ -75,11 +75,11 @@ TEST( ExtCSVLoader, SDCDefaultParsingValid ) {
 
     auto * expToks = expected2;
     int i = 0;
-    l.read_data( iss, 600, "TestType1"
+    l.read_data( iss, 600, "TestType1", 0
             , [&]( const aux::MetaInfo & mi
-                 , size_t lineNo
                  , const std::string & line
                  ){
+                 size_t lineNo = mi.get<size_t>("@lineNo");
                  auto toks = aux::tokenize(line);
                  int j = 0;
                  for( const auto & tok : toks ) {
@@ -98,11 +98,11 @@ TEST( ExtCSVLoader, SDCDefaultParsingValid ) {
 
     expToks = expected1;
     i = 0;
-    l.read_data( iss, 110, "TestType1"
+    l.read_data( iss, 110, "TestType1", 0
             , [&]( const aux::MetaInfo & mi
-                 , size_t lineNo
                  , const std::string & line
                  ){
+                 size_t lineNo = mi.get<size_t>("@lineNo");
                  auto toks = aux::tokenize(line);
                  int j = 0;
                  for( const auto & tok : toks ) {
@@ -181,8 +181,8 @@ TEST( ExtCSVLoader, SDCCustomizedParsingValid ) {
         std::istringstream iss(tstSDCTest2);
         auto m = l.get_doc_struct(iss);
 
-        EXPECT_EQ( m.size(), 2 );
-        // Both pieces of the file should have same type and validity range
+        EXPECT_EQ( m.size(), 1 );
+        // Document part(s) must have same type and validity range
         for( auto entry : m ) {
             EXPECT_EQ( entry.dataType, "TestType2" );
             EXPECT_EQ( entry.validityRange.from, 1 );
@@ -205,10 +205,10 @@ TEST( ExtCSVLoader, SDCCustomizedParsingValid ) {
     {
         size_t i = 0;
         std::istringstream iss(tstSDCTest2);
-        l.read_data( iss, 5, "TestType2"
+        l.read_data( iss, 5, "TestType2", 0
                    , [&]( const aux::MetaInfo & mi
-                        , size_t lineNo
                         , const std::string & line ) {
+                    size_t lineNo = mi.get<size_t>("@lineNo");
                     auto toks = aux::tokenize(line, ',');
                     int j = 0;
                     for( const auto & tok : toks ) {
@@ -219,7 +219,9 @@ TEST( ExtCSVLoader, SDCCustomizedParsingValid ) {
                        EXPECT_EQ( tok, expected[i].toks[j] )
                            << "token #" << j << " of line #" << lineNo
                            << " (" << i << ")" << std::endl;
-                       EXPECT_EQ( mi.get<std::string>("", "", lineNo), expected[i].md );
+                       EXPECT_EQ( mi.get<std::string>("", "", lineNo), expected[i].md )
+                           << "token #" << j << " of line #" << lineNo
+                           << " (" << i << ")" << std::endl;
                        ++j;
                     }
                     ++i;

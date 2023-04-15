@@ -1,0 +1,21 @@
+# A testing run
+runs=1
+columns=label,background,scale,covariance
+DET1-1      99      9.99        9.99
+
+# Runs 1-10 went as usual, except for few minor distractions caused by
+# the weather
+runs=2-10
+columns=label,background,scale,covariance
+DET1-1      10      1.01        0.10
+DET1-2      20      0.85        0.09
+DET2-1      30      0.93        0.12
+
+# Starting from run #7 a new detector (2-2) was added to extend the acceptance,
+# detector 1-2 also was re-calibrated for better stability and background
+# reduction
+runs=7-15
+
+DET1-2       5      0.85        0.07
+DET2-2      10      1.01        0.10
+
