@@ -37,6 +37,16 @@ attributes just for demo.
 Data files
 ----------
 
+A file containing calibration information has simple grammar:
+
+ * comment lines starting from certaing char will be ignored (`#` by default)
+ * lines containing metadata delimiter (`=` by default) will be interpreted
+   as *metadata* definitions
+ * non-empty lines matching certain expresion are considered as tabular data
+
+Although the grammar is assumed to be rather intuitive, see the dedicated
+documentation section for futher details.
+
 Imagine then that you have a file structure like this:
 
 .. code-block::
@@ -179,6 +189,12 @@ columns:
 In this example code we assume that all columns are given for a data type, yet
 it is not the case for our ``erratum.txt`` file -- a bit more elaborated code
 will be shown at the end of this tutorial.
+
+A *metadata* is a very important feature as it sets the *validity*
+and *data type* for certain tabular content, used to properly parse and
+retrieve data blocks. It can be set from within a file, from filename, or
+externally from C++ code. However type and validity must be set for every
+block in one way or another.
 
 Retrieving Updates
 ------------------
