@@ -37,7 +37,9 @@ SDC stands for "Simple calibration data" / "self-descriptive calibrations".
 
 # Author
 
-[NA64 Collaboration (CERN)](https://na64.web.cern.ch/), Renat R. Dusaev
+[NA64 Collaboration (CERN)](https://na64.web.cern.ch/)
+Designed and implemented by Renat R. Dusaev (NA64-CERN, TPU),
+original ExtCSV grammar specification authored by Anton Karneeu (NA64-CERN, INR).
 
 For licensing information, see LICENSE file in repository's root
-dir (it's a GNU GPL 2.1).
+dir (it's GNU GPL 2.1).

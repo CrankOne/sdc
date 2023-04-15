@@ -700,6 +700,9 @@ public:
 
 namespace aux {
 
+class MetaInfo;  // fwd
+template<typename> class Documents;
+
 //                                         ___________________________________
 // ______________________________________/ Utility string processing functions
 
@@ -1239,13 +1242,12 @@ lexical_cast<ColumnsOrder>(const std::string & strexpr) SDC_ENDDECL
  * \ingroup utils
  * */
 class FTSBase {
-private:
+protected:
     /// Reentrant filesystem handle for `fts_open()` family of functions
     FTS * _fhandle;
     FTSENT * _parent  ///< Ptr to parent entry of `fts_open()` functions
          , * _child  ///< Ptr to child entry of `fts_open()` functions
          ;
-    int _chldFlags;  ///\todo xxx, unused?
 protected:
     ///\brief Returns, whether the FTS entry passes the filtering
     ///
@@ -1272,7 +1274,6 @@ public:
     /// Initializes iterator on a dirs; can be made to provide also `stat`
     /// struct for FS entries.
     FTSBase( char * const * input
-           , int ftsChildFlags=FTS_NAMEONLY
            , int ftsOpenFlags=FTS_COMFOLLOW | FTS_NOCHDIR
            , int (*compar)(const FTSENT **, const FTSENT **)=&FTSBase::compare_ftsent
            );
@@ -1289,7 +1290,7 @@ public:
         return true;
     }
 
-    ///\brief Returns path to next FS entry or empty if that's it
+    ///\brief Returns path to next FS entry or empty if no more children
     std::string operator()() {
         _next_child();
         if( !_child ) return "";
@@ -1301,17 +1302,20 @@ public:
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 SDC_INLINE
 FTSBase::FTSBase( char * const * input
-                , int ftsChildFlags
                 , int ftsOpenFlags
                 , int (*compar)(const FTSENT **, const FTSENT **)
-                ) : _chldFlags(ftsChildFlags)
+                )
     {
     char ftsErrBuf[256];
     assert(input);
     assert(*input);
     _fhandle = fts_open( input
-                       , ftsOpenFlags
+                       , ftsOpenFlags | FTS_NOCHDIR
                        , compar );
+    // ^^^ `FTS_NOCHDIR` is required here as typically SDC immediately opens
+    //     returned file by the (possibly) relative path. If this flag is
+    //     not set, `fts_open()` chdir's to the dir struct invalidating
+    //     relative paths.
     if( !_fhandle ) {
         int ftsOpenErrNo = errno;
         char * strerrResult =
@@ -1365,15 +1369,27 @@ protected:
         std::vector<std::string> acceptPatterns
                                , rejectPatterns
                                ;
-        ::off_t fileSizeMin, fileSizeMax;
-
+        ::off_t fileSizeMin  ///< Min size limit, if non-zero
+              , fileSizeMax  ///< Max size limit, if non-zero
+              ;
+        ///\brief Overriden to check additional criteria
         bool _fits( FTSENT * ) const override;
+        ///\brief Returns pointer to current children stats
+        ///
+        /// May return NULL if the instance is invalid state or `FTS_NOSTAT`
+        /// flag was set within `ftsOpenFlags` argument to ctr.
+        ///
+        ///\note If `FTS_NOSTAT` was set, returned ptr may be undefined
+        ///      (according to `man fts_open()`).
+        struct stat * cur_child_stat_ptr() {
+            if(!this->_child) return NULL;
+            return this->_child->fts_statp;
+        }
 
         FTSFiltered( char * const * input
-                   , int ftsChildFlags=FTS_NAMEONLY
                    , int ftsOpenFlags=FTS_COMFOLLOW | FTS_NOCHDIR
                    , int (*compar)(const FTSENT **, const FTSENT **)=&FTSBase::compare_ftsent
-                   ) : FTSBase(input, ftsChildFlags, ftsOpenFlags, compar)
+                   ) : FTSBase(input, ftsOpenFlags, compar)
                      , logStreamPtr(nullptr)
                      {}
         inline virtual ~FTSFiltered(){}
@@ -1404,6 +1420,9 @@ public:
         return true;
     }
 
+    ///\brief Simple call operator for simple `Documents::add_from()`
+    ///
+    /// Changes state of this generator instance. If 
     std::string operator()() {
         std::string p;
         if(_fts) p = (*_fts)();
@@ -2513,8 +2532,8 @@ struct CalibDataTraits< SrcInfo<T> > {
  *   4. Can contain a columnar data (called "CSV blocks") -- a line with
  *      space-delimited tokens (strings and numbers)
  *
- * This way each meaningful file is organized with in _sections_ (one or more).
- * Each _section_ starts with a block of metadata definitions that are
+ * This way each meaningful file is organized with in *sections* (one or more).
+ * Each *section* starts with a block of metadata definitions that are
  * associated to the CSV content block that follows just after.
  *
  *     # A comment
@@ -2533,8 +2552,9 @@ struct CalibDataTraits< SrcInfo<T> > {
  *     # ...
  *
  * Essentially, boundaries between CSV blocks are defined by validity metadata
- * definition. Except for this, each CSV block inherits values from above,
- * meaning that `key1` and `key2` will be defined for both block#1 and block#2.
+ * definition (containing `type` or `runs` tags). Except for this, each CSV
+ * block inherits values from above, meaning that `key1` and `key2` will be
+ * defined for both block#1 and block#2.
  *
  * \ingroup utils
  * */
@@ -2874,7 +2894,7 @@ public:  // iLoader interface implementation
                                   , std::numeric_limits<size_t>::max()
                                   );
     }
-};
+};  // class ExtCSVLoader
 
 /**\brief Load items of certain type for certain validity key
  *
@@ -2891,7 +2911,7 @@ load_from_fs( const std::string & rootpath
             , const std::string & acceptPatterns="*.txt:*.dat"
             , const std::string & rejectPatterns="*.swp:*.swo:*.bak:*.BAK:*.bck:~*:*-orig.txt:*.dev"
             , size_t upSizeLimitBytes=1024*1024*1024
-            , std::ostream * logStreamPtr=&std::cout//nullptr
+            , std::ostream * logStreamPtr=nullptr
             ) {
     // 1. SETUP
     // create calibration document index by run number
