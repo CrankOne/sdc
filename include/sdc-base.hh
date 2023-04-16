@@ -1688,7 +1688,7 @@ public:
                            ) const {
         if( std::numeric_limits<size_t>::max() == lineNo
          && name != "@lineNo" ) {
-            lineNo = this->get<size_t>("@lineNo");
+            lineNo = this->get<size_t>("@lineNo", lineNo, lineNo);
         }
         const auto vs = this->operator[](name);
         if( vs.empty() ) {
@@ -2141,7 +2141,11 @@ public:
     /// Data block snapshot with cached loader handle to read it
     struct DocumentLoadingState {
         /// Loader settings at the current parser state
-        typename iLoader::Defaults defaults;
+        ///
+        /// This field keeps loader defaults at the pre-parsing state that can
+        /// be different from (more common) loader's defaults. Frequent usage
+        /// is to inject metadata based on filename.
+        typename iLoader::Defaults docDefaults;
         /// Pointer to loader in use
         std::shared_ptr<iLoader> loader;
         /// Last block start marker
@@ -2165,16 +2169,16 @@ public:
             docEntryPtr = upd.second;
         // particular loader ptr
         iLoader *
-            docHandlerPtr = docEntryPtr->auxInfo.loader.get();
+            loaderPtr = docEntryPtr->auxInfo.loader.get();
         // copy of loader's defaults to be restored
-        const typename iLoader::Defaults
-            dftsBck = docHandlerPtr->defaults;
-        docHandlerPtr->defaults = dftsBck;
+        const typename iLoader::Defaults dftsBck = loaderPtr->defaults;
+        // set metadata to one saved on pre-parsing
+        loaderPtr->defaults = docEntryPtr->auxInfo.docDefaults;
         // Here static and dynamic polymorphism join.
         // We use C++ lambda function to make runtime-polymorphic handler
         // to read the data into statically-derived data structure.
         try {
-            docHandlerPtr->read_data( docEntryPtr->docID
+            loaderPtr->read_data( docEntryPtr->docID
                   , upd.first
                   , CalibDataTraits<T>::typeName
                   , docEntryPtr->auxInfo.dataBlockBgn
@@ -2201,18 +2205,18 @@ public:
         } catch( errors::ParserError & e ) {
             // append info on faulty file, if needed
             if( e.docID.empty() ) e.docID = docEntryPtr->docID;
-            docHandlerPtr->defaults = dftsBck;
+            loaderPtr->defaults = dftsBck;
             throw;
         } catch( errors::IOError & e ) {
             // append info on faulty file, if needed
             if( e.filename.empty() ) e.filename = docEntryPtr->docID;
-            docHandlerPtr->defaults = dftsBck;
+            loaderPtr->defaults = dftsBck;
             throw;
         } catch(...) {
-            docHandlerPtr->defaults = dftsBck;
+            loaderPtr->defaults = dftsBck;
             throw;
         }
-        docHandlerPtr->defaults = dftsBck;
+        loaderPtr->defaults = dftsBck;
     }
 public:
     /**\brief Add new entry to the validity index pre-parsing its meta
@@ -2222,6 +2226,15 @@ public:
      * document (iterates list, first suitable is taken). Then uses
      * `iLoader::get_doc_struct()` to obtain document reflection info
      * and adds new entry to the validity index.
+     *
+     * First bool flag in paried parameters is used to override the defaults at
+     * the beginning of document parsing: when flag is set, default type or
+     * default validity range will be set to provided ones. When flag is not
+     * set, loader's default values will be used.
+     *
+     * Note that type, validity range and metadata will be saved in the index,
+     * so if there were some, say, metainfo mix-ins, it'll be saved and
+     * propagated whenever the document is retrieved.
      *
      * Returns `false` if no appropriate loader is found for the document
      * or no meaningful data can be read from the documents with current
@@ -2247,11 +2260,12 @@ public:
         assert(loader);
         // save current loader defaults to restore them afterwards
         const auto prevDfts = loader->defaults;
+        // if specified, override parameters with externally given ones
         if(defaultType.first)
             loader->defaults.dataType = defaultType.second;
         if(defaultValidity.first)
             loader->defaults.validityRange = defaultValidity.second;
-        if(mi.first)
+        if(mi.first)  // TODO: shall we rather merge MI here?
             loader->defaults.baseMD = mi.second;
         try {
             const auto docStruct = loader->get_doc_struct(docID);
@@ -2274,6 +2288,8 @@ public:
                             " range for data block (docID=" + docID + ")" );
                 }
                 // add the document to the index
+                // NOTE: important to note, that defaults saved here
+                //       corresponds to the state extracted
                 validityIndex.add_entry( docID // document ID
                                        , block.dataType  // data type
                                        , block.validityRange.from
@@ -2323,6 +2339,12 @@ public:
      * This version explotis generator returning document ID (as string),
      * type and metadata. The generator will be considered as empty when
      * its callable instance will return an empty string.
+     *
+     * First bool flag in paried parameters is the same as in
+     * `Documents::add()` -- it is used to override the defaults at
+     * the beginning of document parsing: when flag is set, default type or
+     * default validity range will be set to provided ones. When flag is not
+     * set, loader's default values will be used.
      *
      * \returns number of documents added to the index with given generator.
      * */
@@ -2839,11 +2861,11 @@ public:  // iLoader interface implementation
         }
         this->defaults.baseMD.set( "@docID"
                                  , docID
-                                 , std::numeric_limits<size_t>::max()
+                                 , std::numeric_limits<size_t>::min()
                                  );
         auto r = get_doc_struct(ifs);
         this->defaults.baseMD.drop( "@docID"
-                                  , std::numeric_limits<size_t>::max()
+                                  , std::numeric_limits<size_t>::min()
                                   );
         return r;
     }
@@ -2887,11 +2909,11 @@ public:  // iLoader interface implementation
         std::ifstream ifs(docID);
         this->defaults.baseMD.set( "@docID"
                                  , docID
-                                 , std::numeric_limits<size_t>::max()
+                                 , std::numeric_limits<size_t>::min()
                                  );
         read_data( ifs, k, forType, acceptCSVFromLine, cllb );
         this->defaults.baseMD.drop( "@docID"
-                                  , std::numeric_limits<size_t>::max()
+                                  , std::numeric_limits<size_t>::min()
                                   );
     }
 };  // class ExtCSVLoader
