@@ -1522,7 +1522,7 @@ FS::FS( const std::string & paths_
             case S_IFDIR : _dirPaths.push_back(cpath.c_str()); break;
             case S_IFREG : _standaloneFiles.push_back(cpath.c_str()); break;
             default:
-                std::cerr << "Ignoring path \"" << cpath
+                WARN_LOG << "Ignoring path \"" << cpath
                     << "\" (not a file or directory." << std::endl;
                 // ^^^ TODO: redirect warning
         };
@@ -2963,7 +2963,7 @@ load_from_fs( const std::string & rootpath
     // subtree and pre-parsing all matching files
     size_t nDocsOnIndex = docs.add_from(fs);
     if(logStreamPtr) {
-        std::cout << "Indexed " << nDocsOnIndex << " document(s) at "
+        *logStreamPtr << "Indexed " << nDocsOnIndex << " document(s) at "
             << rootpath
             << " (accept=\"" << acceptPatterns << "\", reject=\""
             << rejectPatterns << ", size=(10-" << upSizeLimitBytes << ")."
