@@ -99,6 +99,7 @@
 #include <fstream>
 #include <iomanip>
 #include <cmath>
+#include <cstring>
 #include <functional>
 // POSIX-specific
 #include <fts.h>
@@ -1618,7 +1619,7 @@ private:
     typedef std::tuple<std::string, size_t, const std::type_info &> CacheKey;
     /// Hashing function for cache value
     struct CacheKeyHash
-            : public std::unary_function<CacheKey, std::size_t> {
+            /*: public std::unary_function<CacheKey, std::size_t>*/ {
         std::size_t operator()(const CacheKey & k) const {
             return std::hash<std::string>{}(std::get<0>(k))
                  ^ (std::get<1>(k) << 1)
