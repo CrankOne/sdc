@@ -1041,8 +1041,8 @@ template<typename T>
 struct LexicalTraits< ValidityRange<T> > {
     static ValidityRange<T> from_string(const std::string & strexpr) {
         size_t delimPos = strexpr.find(ValidityTraits<T>::strRangeDelimiter);
-        ValidityRange<T> rr = { ValidityTraits<T>::unset
-                              , ValidityTraits<T>::unset
+        ValidityRange<T> rr = { T(ValidityTraits<T>::unset)
+                              , T(ValidityTraits<T>::unset)
                               };
         assert(delimPos == std::string::npos || delimPos < strexpr.size());
         try {
@@ -1063,7 +1063,7 @@ struct LexicalTraits< ValidityRange<T> > {
                     rr.to = ValidityTraits<T>::from_string(subtok);
                     ValidityTraits<T>::advance(rr.to);
                 } else {
-                    rr.to = ValidityTraits<T>::unset;
+                    rr.to = T(ValidityTraits<T>::unset);
                 }
             } else {
                 // defined for a single run -- set "to" to "from + 1"
@@ -2090,8 +2090,8 @@ public:
             aux::MetaInfo baseMD;
         } defaults;
 
-        iLoader() : defaults {"", { ValidityTraits<KeyT>::unset
-                                  , ValidityTraits<KeyT>::unset
+        iLoader() : defaults {"", { KeyT(ValidityTraits<KeyT>::unset)
+                                  , KeyT(ValidityTraits<KeyT>::unset)
                                   }
             } {}
 
@@ -2243,7 +2243,8 @@ public:
      */
     bool add( const std::string & docID
             , const std::pair<bool, std::string> & defaultType={false, ""}
-            , const std::pair<bool, ValidityRange<KeyT>> & defaultValidity={false, {ValidityTraits<KeyT>::unset, ValidityTraits<KeyT>::unset}}
+            , const std::pair<bool, ValidityRange<KeyT>> & defaultValidity={false, { KeyT(ValidityTraits<KeyT>::unset)
+                                                                                   , KeyT(ValidityTraits<KeyT>::unset)}}
             , const std::pair<bool, aux::MetaInfo> & mi={false, {}}
             , std::shared_ptr<iLoader> loader=nullptr
             ) {
