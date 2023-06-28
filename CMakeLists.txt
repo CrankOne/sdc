@@ -46,6 +46,8 @@ target_include_directories (${sdc_LIB}
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     PUBLIC $<INSTALL_INTERFACE:include>
     )
+# Force -fPIC or similar, to prevent clashes in applications that need it
+set_property(TARGET ${sdc_LIB} PROPERTY POSITION_INDEPENDENT_CODE ON)
 if (ROOT_FOUND)
     target_include_directories (${sdc_LIB} SYSTEM PUBLIC ${ROOT_INCLUDE_DIRS} )
     target_link_libraries (${sdc_LIB} PUBLIC ${ROOT_LIBRARIES})
