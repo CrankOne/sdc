@@ -1670,6 +1670,10 @@ public:
         return m;
     }
 
+    ///\brief Returns `false` if no such key exists for any line
+    bool has(const std::string & name) const
+        { return end() != find(name); }
+
     /// \brief Retrieves a value by key from the metadata (defined before
     /// certain line number)
     ///
@@ -2920,7 +2924,7 @@ public:  // iLoader interface implementation
     }
 };  // class ExtCSVLoader
 
-/**\brief Load items of certain type for certain validity key
+/**\brief Example loading items of certain type for certain validity key
  *
  * This function is handy for certain (ad hoc) cases, albeit it must not be
  * used for large applications as it does not benefit from reentrant indeces
