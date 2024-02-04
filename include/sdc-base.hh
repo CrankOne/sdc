@@ -1279,6 +1279,8 @@ public:
            , int (*compar)(const FTSENT **, const FTSENT **)=&FTSBase::compare_ftsent
            );
 
+    ~FTSBase();
+
     /// \brief calls object on one of the entries and switches to the next
     ///
     /// \param callable object must implement invocation operator for `(FTSENT *)`.
@@ -1305,7 +1307,7 @@ SDC_INLINE
 FTSBase::FTSBase( char * const * input
                 , int ftsOpenFlags
                 , int (*compar)(const FTSENT **, const FTSENT **)
-                )
+                ) : _fhandle(NULL)
     {
     char ftsErrBuf[256];
     assert(input);
@@ -1332,6 +1334,8 @@ FTSBase::FTSBase( char * const * input
             nByte += snprintf(ftsErrBuf + nByte, sizeof(ftsErrBuf) - nByte
                     , "\"%s\", ", *ci );
         }
+        fts_close(_fhandle);  // free handle
+        _fhandle = NULL;
         throw errors::IOError(errDetails + " on " + ftsErrBuf);
     }
     // get into a dir provided by input
@@ -1339,6 +1343,7 @@ FTSBase::FTSBase( char * const * input
     if(!_parent) {
         int ftsOpenErrNo = errno;
         fts_close(_fhandle);  // free handle
+        _fhandle = NULL;
         char * strerrResult
             = strerror_r(ftsOpenErrNo, ftsErrBuf, sizeof(ftsErrBuf));
         (void) strerrResult;  // supress warning on NDEBUG
@@ -1347,6 +1352,14 @@ FTSBase::FTSBase( char * const * input
         throw errors::IOError(ftsErrBuf, ftsErrBuf);
     }
     assert(_fhandle);
+}
+#endif
+
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
+SDC_INLINE
+FTSBase::~FTSBase() {
+    if(_fhandle)
+        fts_close(_fhandle);  // free handle
 }
 #endif
 
@@ -1639,6 +1652,14 @@ private:
                               , std::shared_ptr<BaseMetaInfoCache>
                               , CacheKeyHash
                               > _cache;
+    /// Dictionary of MD aliases
+    ///
+    /// Mapping is from alias to "true" name (one to many)
+    std::unordered_map<std::string, std::string> _aliases;
+    /// Dictionary of reverse aliases
+    ///
+    /// Mapping is from "true" name to alias (many to one)
+    std::unordered_multimap<std::string, std::string> _revAliases;
 public:
     using Parent::iterator;
     using Parent::const_iterator;
@@ -1652,13 +1673,43 @@ public:
 
     /// Copies only the MD key/value pairs, cache is not copied
     MetaInfo(const MetaInfo & o) : Parent(o) {}
+    MetaInfo& operator=(const MetaInfo & o) {
+      if (&o != this) { // skip self-assign
+        clear();
+        insert(o.cbegin(), o.cend());
+        _cache.clear();
+      }
+      return *this;
+    }
+
+    ///\brief Defines MD name alias
+    bool define_alias(const std::string & aliasName, const std::string & trueName_) {
+        std::string trueName = resolve_alias_if_need(trueName_);
+        auto it1 = _aliases.emplace(aliasName, trueName);
+        if(!it1.second) {
+            if(it1.first->second != trueName)
+                return false;  // may indicate serious error: colliding aliases for different "true types"
+            return true;
+        }
+        _revAliases.emplace(trueName, aliasName);
+        return true;
+    }
+
+    ///\brief Tries to resolve aliased MD, otherwise returns argument intact
+    std::string resolve_alias_if_need(const std::string & name) const {
+        auto it = _aliases.find(name);
+        if(_aliases.end() == it)
+            return name;
+        return it->second;
+    }
 
     /// A parent container
     //typedef std::unordered_multimap< std::string
     //                               , std::pair<size_t, std::string>
     //                               > Parent;
     /// Retrieves a value by key, returns map by line numbers
-    std::map<size_t, std::string> operator[]( const std::string & name ) const {
+    std::map<size_t, std::string> operator[]( const std::string & name_ ) const {
+        std::string name = resolve_alias_if_need(name_);
         auto eqr = equal_range(name);
         std::map<size_t, std::string> m;
         std::transform( eqr.first, eqr.second
@@ -1687,23 +1738,19 @@ public:
     ///
     /// \throws `sdc::errors::NoMetadataEntry` error if no values(s) found.
     /// \throws `sdc::errors::NoCurrentMetadataEntry` if no value(s) found for line
-    std::string get_strexpr( const std::string & name
+    std::string get_strexpr( const std::string & name_
                            , size_t lineNo=std::numeric_limits<size_t>::max()
                            , size_t * foundLineNo=nullptr
                            ) const {
-        if( std::numeric_limits<size_t>::max() == lineNo
-         && name != "@lineNo" ) {
-            lineNo = this->get<size_t>("@lineNo", lineNo, lineNo);
-        }
-        const auto vs = this->operator[](name);
+        const auto vs = this->operator[](name_);
         if( vs.empty() ) {
             // no metadata with such key is defined in file (at all)
-            throw errors::NoMetadataEntryInFile(name);
+            throw errors::NoMetadataEntryInFile(name_);
         }
         std::map<size_t, std::string>::const_reverse_iterator it(vs.upper_bound(lineNo));
         if( it == vs.rend() ) {
             // no metadata entry with such key defined in file (till this line)
-            throw errors::NoCurrentMetadataEntry(name, lineNo);
+            throw errors::NoCurrentMetadataEntry(name_, lineNo);
         }
         if( foundLineNo ) *foundLineNo = it->first;
         return it->second;
@@ -1722,14 +1769,11 @@ public:
     /// \throws `sdc::errors::NoMetadataEntry` error if no values(s) found.
     /// \throws `sdc::errors::NoCurrentMetadataEntry` if no value(s) found for line
     template<typename T> T
-    get( const std::string & name
+    get( const std::string & name_
        , size_t lineNo=std::numeric_limits<size_t>::max() ) const {
         size_t lFound = 0;
-        auto strexpr = this->get_strexpr(name, lineNo, &lFound);
-        if((!name.empty()) && name[0] == '@' ) {
-            // do not cache items starting with `@'
-            return lexical_cast<T>(strexpr);
-        }
+        auto strexpr = this->get_strexpr(name_, lineNo, &lFound);
+        std::string name = resolve_alias_if_need(name_);
         // try to retrieve the cache
         const CacheKey k = CacheKey{name, lFound, typeid(T)};
         auto cacheIt = _cache.find(k);
@@ -1758,27 +1802,28 @@ public:
     ///
     /// Can throw other exceptions defined for lexical cast failures
     template<typename T> T
-    get( const std::string & name
+    get( const std::string & name_
        , const T & default_
        , size_t lineNo=std::numeric_limits<size_t>::max()
        ) const {
-        const auto vs = this->operator[](name);
+        const auto vs = this->operator[](name_);
         std::map<size_t, std::string>::const_reverse_iterator
                     it(vs.upper_bound(lineNo));
         if( it == vs.rend() ) {
             return default_;
         }
         // standard re-caching get (todo: optimize it?)
-        return this->get<T>(name, lineNo);
+        return this->get<T>(name_, lineNo);
     }
 
     ///\brief Value setter for user code
     ///
     /// Sets the metadata value (string).
-    void set( const std::string & name
+    void set( const std::string & name_
             , const std::string & value
             , size_t lineNo=std::numeric_limits<size_t>::min()
             ) {
+        std::string name = resolve_alias_if_need(name_);
         emplace(name, std::pair<size_t, std::string>(lineNo, value));
     }
 
@@ -2183,6 +2228,7 @@ public:
         // We use C++ lambda function to make runtime-polymorphic handler
         // to read the data into statically-derived data structure.
         try {
+            //std::cout << "XXX " << ValidityTraits<KeyT>::to_string(upd.first) << std::endl;  // XXX
             loaderPtr->read_data( docEntryPtr->docID
                   , upd.first
                   , CalibDataTraits<T>::typeName
