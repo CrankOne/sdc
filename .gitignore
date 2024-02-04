@@ -12,6 +12,9 @@ doc/build/*
 *.o
 *.obj
 
+# Generated header
+include/sdc.hh
+
 # Precompiled Headers
 *.gch
 *.pch
