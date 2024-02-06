@@ -77,9 +77,11 @@ TEST( ExtCSVLoader, SDCDefaultParsingValid ) {
     int i = 0;
     l.read_data( iss, 600, "TestType1", 0
             , [&]( const aux::MetaInfo & mi
+                 , size_t lineNo_
                  , const std::string & line
-                 ){
+                 ) {
                  size_t lineNo = mi.get<size_t>("@lineNo");
+                 assert(lineNo == lineNo_);
                  auto toks = aux::tokenize(line);
                  int j = 0;
                  for( const auto & tok : toks ) {
@@ -100,9 +102,11 @@ TEST( ExtCSVLoader, SDCDefaultParsingValid ) {
     i = 0;
     l.read_data( iss, 110, "TestType1", 0
             , [&]( const aux::MetaInfo & mi
+                 , size_t lineNo_
                  , const std::string & line
                  ){
                  size_t lineNo = mi.get<size_t>("@lineNo");
+                 assert(lineNo == lineNo_);
                  auto toks = aux::tokenize(line);
                  int j = 0;
                  for( const auto & tok : toks ) {
@@ -207,8 +211,10 @@ TEST( ExtCSVLoader, SDCCustomizedParsingValid ) {
         std::istringstream iss(tstSDCTest2);
         l.read_data( iss, 5, "TestType2", 0
                    , [&]( const aux::MetaInfo & mi
+                        , size_t lineNo_
                         , const std::string & line ) {
                     size_t lineNo = mi.get<size_t>("@lineNo");
+                    assert(lineNo == lineNo_);
                     auto toks = aux::tokenize(line, ',');
                     int j = 0;
                     for( const auto & tok : toks ) {

@@ -92,6 +92,7 @@
 //
 // Common includes
 #include <cassert>
+#include <stdexcept>
 #include <unordered_map>
 #include <list>
 #include <map>
@@ -247,8 +248,8 @@ struct ValidityTraits {
  * */
 template<typename T>
 struct ValidityRange {
-    T from  /// validity period start
-    , to;  ///< validity period end
+    T from  ///< validity period start (inclusively)
+    , to;  ///< validity period end (exclusively)
 
     ///\brief Returns intersection of two runs range
     ///
@@ -2121,6 +2122,7 @@ public:
         /// A callback function type, performing reading of the string
         /// expression into calibration data type
         typedef std::function< bool ( const typename aux::MetaInfo &
+                                    , size_t
                                     , const std::string & )
                              > ReaderCallback;
         ///\brief Externally set validity defaults for the loader
@@ -2212,6 +2214,7 @@ public:
                                                   , DocumentLoadingState
                                                   >::Updates::value_type upd
                     , typename CalibDataTraits<T>::template Collection<> & dest
+                    , KeyT forKey
                     ) const {
         // doc entry to read (has docID, valid-to, auxinfo which is of this
         // class' DocumentLoadingState -- defaults+loader )
@@ -2230,15 +2233,22 @@ public:
         try {
             //std::cout << "XXX " << ValidityTraits<KeyT>::to_string(upd.first) << std::endl;  // XXX
             loaderPtr->read_data( docEntryPtr->docID
-                  , upd.first
+                  , forKey
                   , CalibDataTraits<T>::typeName
                   , docEntryPtr->auxInfo.dataBlockBgn
                   , [&]( const typename aux::MetaInfo & meta
+                       , size_t lineNo
                        , const std::string & expression ) {
                             try {
                                 CalibDataTraits<T>::collect( dest
-                                        , CalibDataTraits<T>::parse_line(expression, meta)
+                                        , CalibDataTraits<T>::parse_line(
+                                                expression
+                                              //, lineNo  // xxx, obsolete
+                                              , meta
+                                              //, docEntryPtr->docID  // xxx, obsolete
+                                              )
                                         , meta
+                                        , lineNo
                                         );
                             } catch( errors::RuntimeError & e ) {
                                 throw errors::NestedError<errors::ParserError>( e
@@ -2317,7 +2327,7 @@ public:
             loader->defaults.dataType = defaultType.second;
         if(defaultValidity.first)
             loader->defaults.validityRange = defaultValidity.second;
-        if(mi.first)  // TODO: shall we rather merge MI here?
+        if(mi.first)
             loader->defaults.baseMD = mi.second;
         try {
             const auto docStruct = loader->get_doc_struct(docID);
@@ -2435,7 +2445,7 @@ public:
         const auto updates = validityIndex.updates(
                 CalibDataTraits<T>::typeName, key, noTypeIsOk );
         for( const auto & upd : updates ) {
-            load_update_into<T>(upd, dest);
+            load_update_into<T>(upd, dest, key);
         }
         return dest;
     }
@@ -2451,7 +2461,8 @@ public:
     get_latest(KeyT key) const {
         typename CalibDataTraits<T>::template Collection<> dest;
         load_update_into<T>( validityIndex.latest(CalibDataTraits<T>::typeName, key)
-                            , dest);
+                            , dest
+                            , key );
         return dest;
     }
 
@@ -2572,18 +2583,21 @@ struct CalibDataTraits< SrcInfo<T> > {
     static inline void collect( Collection<TT> & c
                               , const SrcInfo<T> & e
                               , const aux::MetaInfo & mi
+                              , size_t ll
                               ) { 
-        CalibDataTraits<T>::template collect<SrcInfo<T>>(c, e, mi);
+        CalibDataTraits<T>::template collect<SrcInfo<T>>(c, e, mi, ll);
     }
     /// Forwards call to wrapped traits
     static SrcInfo<T>
     parse_line( const std::string & line
               , const aux::MetaInfo & mi
               ) {
+        size_t lineNo = mi.get<size_t>("@lineNo");
+        const std::string srcID = mi.get<std::string>("@docID", "(undefined)");
         return SrcInfo<T>{
-                  CalibDataTraits<T>::parse_line(line, mi)
-                , mi.get<size_t>("@lineNo")
-                , mi.get<std::string>("@docID", "(undefined)")
+                  CalibDataTraits<T>::parse_line(line, mi, lineNo, srcID)
+                , lineNo
+                , srcID
                 };
     }
 };
@@ -2826,7 +2840,7 @@ public:
             snprintf(bf, sizeof(bf), "%zu", lineNo);
             md.set("@lineNo", bf);
             assert(md.get<size_t>("@lineNo") == lineNo);
-            bool ret = cllb(md, line);
+            bool ret = cllb(md, lineNo, line);
             assert(md.get<size_t>("@lineNo") == lineNo);
             md.drop("@lineNo");
             return ret;

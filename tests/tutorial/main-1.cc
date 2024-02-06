@@ -18,6 +18,7 @@ struct CalibDataTraits<ChannelCalibration> {
     static inline void collect( Collection<T> & col
                               , const T & item
                               , const aux::MetaInfo & mi
+                              , size_t lineNo
                               ) { col.push_back(item); }
 
     static ChannelCalibration
@@ -48,7 +49,10 @@ ChannelCalibration CalibDataTraits<ChannelCalibration>::parse_line(
 }  // namespace sdc
 
 int main (int argc, char* argv[]) {
-    if(3 != argc) return 1;
+    if(3 != argc) {
+        std::cerr << "Error: two command line args requred (path, key)" << std::endl;
+        return 1;
+    }
     int k = std::stoi(argv[2]);
     std::vector<ChannelCalibration> entries
         = sdc::load_from_fs<int, ChannelCalibration>(argv[1], k);

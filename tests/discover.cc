@@ -35,6 +35,8 @@ struct CalibDataTraits<Foo> {
     static Foo parse_line( const std::string & line
                          , const aux::MetaInfo & mi
                          ) {
+        std::cout << line << std::endl;
+        return Foo{};
         // insantiate new calib data item to fill
         Foo item;
         // one can query metadata valid for current CSV block as following.
@@ -76,6 +78,7 @@ struct CalibDataTraits<Foo> {
     static void collect( Collection<T> & dest
                        , const T & newEntry
                        , const aux::MetaInfo &  // you can use metainfo
+                       , size_t lineNo
                        ) { dest.push_back(newEntry); }
     // ^^^ alternatively, for your `Collection=std::map<std::string, T>, use
     // for instance:
@@ -126,6 +129,10 @@ main(int argc, char * argv[]) {
     // retrieved (note that collection type is the `Collection` template from
     // traits above):
     std::list<Foo> entries_123_
-        = docs.get_latest<Foo>(123);
+        = docs.load<Foo>(8458);
+
+    for(const auto & entry : entries_123_) {
+        std::cout << entry.one << ": " << entry.two << std::endl;
+    }
 }
 
