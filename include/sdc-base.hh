@@ -2143,7 +2143,7 @@ public:
 
         iLoader() : defaults {"", { KeyT(ValidityTraits<KeyT>::unset)
                                   , KeyT(ValidityTraits<KeyT>::unset)
-                                  }
+                                  }, aux::MetaInfo()
             } {}
 
 
@@ -2595,7 +2595,8 @@ struct CalibDataTraits< SrcInfo<T> > {
         size_t lineNo = mi.get<size_t>("@lineNo");
         const std::string srcID = mi.get<std::string>("@docID", "(undefined)");
         return SrcInfo<T>{
-                  CalibDataTraits<T>::parse_line(line, mi, lineNo, srcID)
+                  CalibDataTraits<T>::parse_line(line, mi),
+                  lineNo, srcID
                 };
     }
 };
