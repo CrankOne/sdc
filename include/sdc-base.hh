@@ -2596,8 +2596,6 @@ struct CalibDataTraits< SrcInfo<T> > {
         const std::string srcID = mi.get<std::string>("@docID", "(undefined)");
         return SrcInfo<T>{
                   CalibDataTraits<T>::parse_line(line, mi, lineNo, srcID)
-                , lineNo
-                , srcID
                 };
     }
 };
