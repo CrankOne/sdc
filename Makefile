@@ -1,6 +1,5 @@
-# This Makefile can be used on older platforms
-# with CMake issues. If possible, please rely
-# on standard CMake procedure.
+# This Makefile can be used on older platforms with CMake issues. If possible,
+# please rely on standard CMake procedure.
 
 CFLAGS=$(shell root-config --cflags)
 
@@ -19,5 +18,10 @@ include/sdc.hh: include/sdc.hh.in
 
 clean:
 	rm -f libsdc.a sdc.o include/sdc.hh
+
+install: libsdc.a
+	mkdir -p lib
+	mv -v $< lib
+	ln -s $@ lib/libsdc.a
 
 .PHONY: all clean
