@@ -22,6 +22,6 @@ clean:
 install: libsdc.a
 	mkdir -p lib
 	mv -v $< lib
-	ln -s $@ lib/libsdc.a
+	ln -s lib/libsdc.a $<
 
 .PHONY: all clean
