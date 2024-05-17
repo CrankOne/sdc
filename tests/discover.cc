@@ -33,10 +33,11 @@ struct CalibDataTraits<Foo> {
     // tokenization and trimming of the string line, but you can rely on your
     // own.
     static Foo parse_line( const std::string & line
+                         , size_t lineNo
                          , const aux::MetaInfo & mi
+                         , const std::string & docID
                          ) {
-        std::cout << line << std::endl;
-        return Foo{};
+        std::cout << docID << ":" << lineNo << " -> \"" << line << "\"" << std::endl;
         // insantiate new calib data item to fill
         Foo item;
         // one can query metadata valid for current CSV block as following.
@@ -96,6 +97,15 @@ main(int argc, char * argv[]) {
     // documents)
     typedef int RunType;
 
+    std::string docsPath = "../tests/assets/test1/one.txt";
+    int runNo = 8458;
+    if(argc == 3) {
+        docsPath = argv[1];
+        runNo = atoi(argv[2]);
+    }
+    std::cout << "Info: acquiring entries from \"" << docsPath << "\" for run #"
+        << runNo << std::endl;
+
     // Initialization
     ////////////////
 
@@ -115,12 +125,18 @@ main(int argc, char * argv[]) {
     // This method has number of useful, bot non-mandatory args for defaults:
     // default data type, default validity range, supplementary metadata to 
     // be provided to the parser, etc
-    bool added = docs.add("../tests/assets/test1/one.txt");
-    assert(added);  // check that file was added
+    bool added = docs.add(docsPath);
+    if(!added) {
+        std::cerr << "Error: failed to add entries from \""
+            << docsPath << "\"" << std::endl;
+        return 1;
+    }
+    std::cout << "Index built." << std::endl;
 
     // Usage
     ///////
 
+    std::cout << "Documents index JSON:" << std::endl;
     docs.dump_to_json(std::cout);  // XXX
 
     // This is simplest possible retrieve of the collection of items valid for
@@ -128,11 +144,11 @@ main(int argc, char * argv[]) {
     // different ranges and that's how collections of entries can be
     // retrieved (note that collection type is the `Collection` template from
     // traits above):
-    std::list<Foo> entries_123_
-        = docs.load<Foo>(8458);
+    std::list<Foo> entries = docs.load<Foo>(runNo);
 
-    for(const auto & entry : entries_123_) {
-        std::cout << entry.one << ": " << entry.two << std::endl;
+    std::cout << "Loaded " << entries.size() << " entries for run #" << runNo << " (one: two three):" << std::endl;
+    for(const auto & entry : entries) {
+        std::cout << entry.one << ":\t" << entry.two << "\t" << entry.three << std::endl;
     }
 }
 

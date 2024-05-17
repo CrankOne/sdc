@@ -215,6 +215,10 @@ namespace sdc {
 
 typedef SDC_INTRADOC_MARKUP_T IntradocMarkup_t;
 
+#ifndef ENABLE_SDC_FIX001
+#   define ENABLE_SDC_FIX001 1
+#endif
+
 //                                                   __________________________
 // ________________________________________________/ Run ID & runs range types
 
@@ -2243,9 +2247,9 @@ public:
                                 CalibDataTraits<T>::collect( dest
                                         , CalibDataTraits<T>::parse_line(
                                                 expression
-                                              //, lineNo  // xxx, obsolete
+                                              , lineNo
                                               , meta
-                                              //, docEntryPtr->docID  // xxx, obsolete
+                                              , docEntryPtr->docID
                                               )
                                         , meta
                                         , lineNo
@@ -2590,13 +2594,14 @@ struct CalibDataTraits< SrcInfo<T> > {
     /// Forwards call to wrapped traits
     static SrcInfo<T>
     parse_line( const std::string & line
-              , const aux::MetaInfo & mi
+              , size_t lineNo
+              , const aux::MetaInfo & m
+              , const std::string & filename
               ) {
-        size_t lineNo = mi.get<size_t>("@lineNo");
-        const std::string srcID = mi.get<std::string>("@docID", "(undefined)");
         return SrcInfo<T>{
-                  CalibDataTraits<T>::parse_line(line, mi),
-                  lineNo, srcID
+                  CalibDataTraits<T>::parse_line(line, lineNo, m, filename)
+                , lineNo
+                , filename
                 };
     }
 };
@@ -2852,12 +2857,14 @@ protected:
     size_t _parse_stream( std::istream & inputStream
                         , iState & state
                         , IntradocMarkup_t acceptCSVFromLine
+                        , bool onlyThisBlock=false
                         ) {
         // This is the most important method of (pre-)parsing the documents;
         // it steers the logic of indexing CSV blocks wrt document structure.
         std::string line;
         size_t lineCount = 0;
         bool indexNextCSVLine = true;
+        bool thisBlockPassed = false;
         // read next line:
         while( aux::getline( inputStream, line, lineCount
                     , [&](const std::string & l){return state.handle_comment(l);}
@@ -2875,6 +2882,10 @@ protected:
                 continue;
             }
             if(lineCount < acceptCSVFromLine) continue;  // omit irrelevant CSV
+            if(indexNextCSVLine && onlyThisBlock) {
+                if(thisBlockPassed) return lineCount;
+                thisBlockPassed = true;
+            }
             if( ! state.handle_csv(line, lineCount) ) {
                 continue;  // not a CSV
             }
@@ -2954,7 +2965,7 @@ public:  // iLoader interface implementation
                           , cllb
                           , this->defaults.baseMD
                           );
-        _parse_stream( ifs, state, acceptCSVFromLine );
+        _parse_stream( ifs, state, acceptCSVFromLine, ENABLE_SDC_FIX001 );
     }
 
     /** Opens file and forwards parsing to stream version.

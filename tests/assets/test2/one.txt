@@ -1,0 +1,19 @@
+# A tricky thing is the meaning of
+# - https://gitlab.cern.ch/P348/p348-daq/-/merge_requests/458
+
+columns = one, two, three
+type = Foo
+someFactor = 1
+
+runs=1-10
+uno 123 345
+dos 678 912
+
+runs=2-3
+uno  1 3
+tres 2 4
+
+runs=1-5
+uno 987 654
+dos 321 987
+

@@ -23,12 +23,14 @@ struct CalibDataTraits<ChannelCalibration> {
 
     static ChannelCalibration
             parse_line( const std::string & line
+                      , size_t lineNo
                       , const aux::MetaInfo & m
+                      , const std::string & docID
                       );
 };
 
 ChannelCalibration CalibDataTraits<ChannelCalibration>::parse_line(
-        const std::string & line, const aux::MetaInfo & mi ) {
+        const std::string & line, size_t lineNo, const aux::MetaInfo & mi, const std::string & docID ) {
     // subject instance
     ChannelCalibration item;
     // tokenize line
