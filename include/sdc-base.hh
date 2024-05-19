@@ -709,6 +709,37 @@ namespace aux {
 class MetaInfo;  // fwd
 template<typename> class Documents;
 
+class LoadLog {
+private:
+    std::string _currentSrcID;
+    size_t _lineNumber;
+    struct Entry {
+        const std::string srcID, columnName, value;
+        size_t lineNumber;
+    };
+    std::list<Entry> _entries;
+public:
+    void set_source(const std::string & srcID, size_t lineNo) {
+        _currentSrcID = srcID;
+        _lineNumber = lineNo;
+    }
+    void add_entry( const std::string & columnLabelStr
+                  , const std::string & valueStr
+                  ) {
+        _entries.push_back(Entry{_currentSrcID, columnLabelStr, valueStr, _lineNumber});
+    }
+    void to_json(std::ostream & os) const {
+        os << "[";
+        bool isFirst = true;
+        for(const auto & entry : _entries) {
+            if(!isFirst) os << ","; else isFirst = false;
+            os << "{\"srcID\":\"" << entry.srcID << "\",\"lineNo\":" << entry.lineNumber
+                << ",\"c\":\"" << entry.columnName << "\",\"v\":\"" << entry.value << "\"}";
+        }
+        os << "]";
+    }
+};
+
 //                                         ___________________________________
 // ______________________________________/ Utility string processing functions
 
@@ -1197,7 +1228,7 @@ struct ColumnsOrder : public std::unordered_map<std::string, int> {
     }
     #endif
 
-    CSVLine interpret(const std::list<std::string> & toks_) {
+    CSVLine interpret(const std::list<std::string> & toks_, LoadLog * loadLogPtr=nullptr) {
         std::vector<std::string> toks(toks_.begin(), toks_.end());
         CSVLine l;
         for( const auto & meaning : *this ) {
@@ -1211,6 +1242,8 @@ struct ColumnsOrder : public std::unordered_map<std::string, int> {
                 throw errors::ParserError(errBuf);
             }
             l[meaning.first] = toks[meaning.second];
+            if(!loadLogPtr) continue;
+            loadLogPtr->add_entry(meaning.first, toks[meaning.second]);
         }
         return l;
     }
@@ -1846,6 +1879,25 @@ public:
         }
         Parent::erase(name);
     }
+
+    /// Dumps current MD content as JSON dictionary
+    void to_json(std::ostream & os) const {
+        os << "{\"entries\":{";
+        bool first = true;
+        for(const auto & entry : *this) {
+            if(first) first = false; else os << ",";
+            os << "\"" << entry.first << "\":[" << entry.second.first
+               << ",\"" << entry.second.second << "\"]";
+        }
+        os << "},\"aliases\":{";
+        first = true;
+        for(const auto & aliasEntry : _aliases) {
+            if(first) first = false; else os << ",";
+            os << "\"" << aliasEntry.first << "\":\""
+                << aliasEntry.second << "\"";
+        }
+        os << "}}";
+    }
 };  // class MetaInfo
 
 #if 0  // TODO?
@@ -1912,6 +1964,15 @@ public:
         KeyT validTo;
         /// Any other user data associated with this document entry
         AuxInfoT auxInfo;
+
+        void to_json(std::ostream & os) const {
+            os << "{"
+               << "\"docID\":\"" << docID << "\","
+                   << "\"validTo\":\"" << ValidityTraits<KeyT>::to_string(validTo) << "\","
+                   << "\"auxInfo\":";
+            auxInfo.to_json(os);
+            os << "}";
+        }
     };
     /// List of updates to be applied, returned by querying operations
     typedef std::list< std::pair<KeyT, const DocumentEntry *> > Updates;
@@ -2143,6 +2204,16 @@ public:
             ValidityRange<KeyT> validityRange;
             ///\brief Basic metadata content
             aux::MetaInfo baseMD;
+
+            void to_json(std::ostream & os) const {
+                os << "{\"dataType\":\"" << dataType
+                   << "\",\"validityRange\":[\""
+                   << ValidityTraits<KeyT>::to_string(validityRange.from) << "\",\""
+                   << ValidityTraits<KeyT>::to_string(validityRange.to)
+                   << "\"],\"baseMD\":";
+                baseMD.to_json(os);
+                os << "}";
+            }
         } defaults;
 
         iLoader() : defaults {"", { KeyT(ValidityTraits<KeyT>::unset)
@@ -2206,6 +2277,13 @@ public:
         std::shared_ptr<iLoader> loader;
         /// Last block start marker
         IntradocMarkup_t dataBlockBgn;
+        /// Prints document loading state as JSON
+        void to_json(std::ostream & os) const {
+            os << "{"
+               << "\"defaults\":";
+            docDefaults.to_json(os);
+            os << "}";
+        }
     };
     /// Index of documents with polymorphic aux info
     ValidityIndex<KeyT, DocumentLoadingState> validityIndex;
@@ -2219,6 +2297,7 @@ public:
                                                   >::Updates::value_type upd
                     , typename CalibDataTraits<T>::template Collection<> & dest
                     , KeyT forKey
+                    , aux::LoadLog * loadLogPtr=nullptr
                     ) const {
         // doc entry to read (has docID, valid-to, auxinfo which is of this
         // class' DocumentLoadingState -- defaults+loader )
@@ -2243,6 +2322,7 @@ public:
                   , [&]( const typename aux::MetaInfo & meta
                        , size_t lineNo
                        , const std::string & expression ) {
+                            if(loadLogPtr) loadLogPtr->set_source(docEntryPtr->docID, lineNo);
                             try {
                                 CalibDataTraits<T>::collect( dest
                                         , CalibDataTraits<T>::parse_line(
@@ -2250,6 +2330,7 @@ public:
                                               , lineNo
                                               , meta
                                               , docEntryPtr->docID
+                                              , loadLogPtr
                                               )
                                         , meta
                                         , lineNo
@@ -2264,6 +2345,7 @@ public:
                                         , std::numeric_limits<size_t>::max()
                                         ) );
                             }
+                            if(loadLogPtr) loadLogPtr->set_source("(none)", 0);
                             return true;
                         }
                 );
@@ -2444,12 +2526,12 @@ public:
     ///
     /// Useful for partially-defined data that must be updated incrementally.
     template<typename T> typename CalibDataTraits<T>::template Collection<>
-    load( KeyT key, bool noTypeIsOk=false) const {
+    load( KeyT key, bool noTypeIsOk=false, aux::LoadLog * loadLogPtr=nullptr) const {
         typename CalibDataTraits<T>::template Collection<> dest;
         const auto updates = validityIndex.updates(
                 CalibDataTraits<T>::typeName, key, noTypeIsOk );
         for( const auto & upd : updates ) {
-            load_update_into<T>(upd, dest, key);
+            load_update_into<T>(upd, dest, key, loadLogPtr);
         }
         return dest;
     }
@@ -2462,11 +2544,12 @@ public:
     /// Useful for data that is expected to be fully defined in single
     /// document.
     template<typename T> typename CalibDataTraits<T>::template Collection<>
-    get_latest(KeyT key) const {
+    get_latest(KeyT key, aux::LoadLog * loadLogPtr=nullptr) const {
         typename CalibDataTraits<T>::template Collection<> dest;
         load_update_into<T>( validityIndex.latest(CalibDataTraits<T>::typeName, key)
                             , dest
-                            , key );
+                            , key
+                            , loadLogPtr );
         return dest;
     }
 
@@ -2597,11 +2680,13 @@ struct CalibDataTraits< SrcInfo<T> > {
               , size_t lineNo
               , const aux::MetaInfo & m
               , const std::string & filename
+              , aux::LoadLog * loadLogPtr=nullptr
               ) {
         return SrcInfo<T>{
                   CalibDataTraits<T>::parse_line(line, lineNo, m, filename)
                 , lineNo
                 , filename
+                , loadLogPtr
                 };
     }
 };
@@ -2993,6 +3078,9 @@ public:  // iLoader interface implementation
                                   );
     }
 };  // class ExtCSVLoader
+
+//                                                                      _______
+// ___________________________________________________________________/ Utils
 
 /**\brief Example loading items of certain type for certain validity key
  *

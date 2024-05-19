@@ -36,8 +36,8 @@ struct CalibDataTraits<Foo> {
                          , size_t lineNo
                          , const aux::MetaInfo & mi
                          , const std::string & docID
+                         , sdc::aux::LoadLog * loadLogPtr=nullptr
                          ) {
-        std::cout << docID << ":" << lineNo << " -> \"" << line << "\"" << std::endl;
         // insantiate new calib data item to fill
         Foo item;
         // one can query metadata valid for current CSV block as following.
@@ -51,7 +51,7 @@ struct CalibDataTraits<Foo> {
         // Use columns tokenization helper from SDC to split the line on
         // key/value pairs by using `columns=` metadata:
         auto values = mi.get<aux::ColumnsOrder>("columns")
-                .interpret(aux::tokenize(line));
+                .interpret(aux::tokenize(line), loadLogPtr);
         // fill the calibration entry item. Syntax of the `()` requires
         // the "column name" and permits for optional "default" value. Here
         // we insist that column "one" must be specified always and have
@@ -103,8 +103,8 @@ main(int argc, char * argv[]) {
         docsPath = argv[1];
         runNo = atoi(argv[2]);
     }
-    std::cout << "Info: acquiring entries from \"" << docsPath << "\" for run #"
-        << runNo << std::endl;
+
+    std::ostream & os = std::cout;
 
     // Initialization
     ////////////////
@@ -131,24 +131,41 @@ main(int argc, char * argv[]) {
             << docsPath << "\"" << std::endl;
         return 1;
     }
-    std::cout << "Index built." << std::endl;
 
     // Usage
     ///////
+    
+    os << "{\"index\":";
+    docs.dump_to_json(os);
 
-    std::cout << "Documents index JSON:" << std::endl;
-    docs.dump_to_json(std::cout);  // XXX
-
+    #if 0
     // This is simplest possible retrieve of the collection of items valid for
     // given period. In our examplar documents we difned few entries for
     // different ranges and that's how collections of entries can be
     // retrieved (note that collection type is the `Collection` template from
     // traits above):
     std::list<Foo> entries = docs.load<Foo>(runNo);
-
     std::cout << "Loaded " << entries.size() << " entries for run #" << runNo << " (one: two three):" << std::endl;
     for(const auto & entry : entries) {
         std::cout << entry.one << ":\t" << entry.two << "\t" << entry.three << std::endl;
     }
+    #else
+    sdc::aux::LoadLog loadLog;
+    os << ",\"updates\":";
+    auto updates = docs.validityIndex.updates(sdc::CalibDataTraits<Foo>::typeName, runNo, false);
+    bool isFirst = true;
+    os << "[";
+    typename sdc::CalibDataTraits<Foo>::template Collection<> dest;
+    for(const auto & updEntry : updates) {
+        if(!isFirst) os << ","; else isFirst = false;
+        os << "{\"key\":\"" << sdc::ValidityTraits<RunType>::to_string(updEntry.first) << "\",\"update\":";
+        updEntry.second->to_json(os);
+        os << "}";
+        docs.load_update_into<Foo>(updEntry, dest, runNo, &loadLog);
+    }
+    os << "],\"loadLog\":";
+    loadLog.to_json(os);
+    os << "}";
+    #endif
 }
 

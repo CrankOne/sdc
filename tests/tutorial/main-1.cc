@@ -26,11 +26,12 @@ struct CalibDataTraits<ChannelCalibration> {
                       , size_t lineNo
                       , const aux::MetaInfo & m
                       , const std::string & docID
+                      , sdc::aux::LoadLog * loadLogPtr=nullptr
                       );
 };
 
 ChannelCalibration CalibDataTraits<ChannelCalibration>::parse_line(
-        const std::string & line, size_t lineNo, const aux::MetaInfo & mi, const std::string & docID ) {
+        const std::string & line, size_t lineNo, const aux::MetaInfo & mi, const std::string & docID, sdc::aux::LoadLog * loadLogPtr ) {
     // subject instance
     ChannelCalibration item;
     // tokenize line
@@ -39,7 +40,7 @@ ChannelCalibration CalibDataTraits<ChannelCalibration>::parse_line(
     // line to get the proxy object (a "CSV line") for easy by-column
     // retrieval
     aux::ColumnsOrder::CSVLine csv
-            = mi.get<sdc::aux::ColumnsOrder>("columns").interpret(tokens);
+            = mi.get<sdc::aux::ColumnsOrder>("columns").interpret(tokens, loadLogPtr);
     // now, once can set item's fields like
     item.label      = csv("label");
     item.background = csv("background", 0);
