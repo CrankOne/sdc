@@ -21,7 +21,7 @@ cmake_minimum_required (VERSION 2.8.12)
 project (sdc)
 
 set (SDC_VERSION_MAJOR 0)
-set (SDC_VERSION_MINOR 1)
+set (SDC_VERSION_MINOR 2)
 set (SDC_VERSION ${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR})
 
 #
