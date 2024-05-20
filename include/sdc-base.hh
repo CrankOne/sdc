@@ -103,6 +103,7 @@
 #include <cstring>
 #include <functional>
 #include <sstream>
+#include <vector>
 // POSIX-specific
 #include <fts.h>
 #include <sys/stat.h>
@@ -127,7 +128,6 @@
 #   include <limits>
 #   include <iterator>
 #   include <functional>
-#   include <vector>
 #   include <memory>
 #   include <unordered_set>
 #   include <ctype.h>
