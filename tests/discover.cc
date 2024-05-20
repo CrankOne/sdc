@@ -36,15 +36,15 @@ struct CalibDataTraits<Foo> {
                          , size_t lineNo
                          , const aux::MetaInfo & mi
                          , const std::string & docID
+                         , sdc::aux::LoadLog * loadLogPtr=nullptr
                          ) {
-        std::cout << docID << ":" << lineNo << " -> \"" << line << "\"" << std::endl;
         // insantiate new calib data item to fill
         Foo item;
         // one can query metadata valid for current CSV block as following.
         int someFactor = mi.get<int>("someFactor");
 
         // If TFormula supported:
-        float factor = mi.get<double>("someFactor", std::nan("0"));
+        //float factor = mi.get<double>("someFactor", std::nan("0"));
 
         item.formulaResult = mi.get<double>("someFormula", std::nan("0"));
 
@@ -135,9 +135,6 @@ main(int argc, char * argv[]) {
 
     // Usage
     ///////
-
-    std::cout << "Documents index JSON:" << std::endl;
-    docs.dump_to_json(std::cout);  // XXX
 
     // This is simplest possible retrieve of the collection of items valid for
     // given period. In our examplar documents we difned few entries for
