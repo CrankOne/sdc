@@ -2685,7 +2685,6 @@ struct CalibDataTraits< SrcInfo<T> > {
                   CalibDataTraits<T>::parse_line(line, lineNo, m, filename)
                 , lineNo
                 , filename
-                , loadLogPtr
                 };
     }
 };
