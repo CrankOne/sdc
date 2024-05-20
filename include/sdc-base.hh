@@ -104,6 +104,8 @@
 #include <functional>
 #include <sstream>
 #include <vector>
+#include <limits>
+#include <memory>
 // POSIX-specific
 #include <fts.h>
 #include <sys/stat.h>
@@ -125,10 +127,8 @@
 #   include <string>
 #   include <iostream>
 #   include <algorithm>
-#   include <limits>
 #   include <iterator>
 #   include <functional>
-#   include <memory>
 #   include <unordered_set>
 #   include <ctype.h>
 // POSIX-specific
