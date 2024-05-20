@@ -60,7 +60,7 @@ def get_load_log_pd(data, indexColumns=None):
     # apply slicing, if selected
     slicers = {}
     if indexColumns:
-        slicers = dict(filter(lambda c: type(c) is list, indexColumns))
+        slicers = dict(filter(lambda c: type(c) is list and 2 == len(c), indexColumns))
         # create indexer template (with empty slicers)
         indexer = [slice(None)]*len(df.index.levels)
         # add custom slicers
@@ -77,8 +77,10 @@ def print_load_log(data, indexColumns=None, stream=sys.stdout):
     """
     Uses pandas to print the data loading log, as retrieved by `run_loader()`.
     """
+    import pandas as pd
     df = get_load_log_pd(data, indexColumns=indexColumns)
-    stream.write(str(df) + '\n')
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.width', None):
+        stream.write(str(df) + '\n')
 
 
 def instantiate_cmdargs_parser():
@@ -97,7 +99,9 @@ def instantiate_cmdargs_parser():
     p.add_argument( '-d', '--path', help="Base path for calibrations data."
             , type=str, required=True )
     p.add_argument( '-c', '--index-column', help="A column to index data."
-            , type=lambda a: [a.split('=')] if '=' in a else [a,] )
+            , type=lambda a: a.split('=') if '=' in a else [a,]
+            , action='append'
+            )
     return p
 
 
