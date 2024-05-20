@@ -106,6 +106,7 @@
 #include <vector>
 #include <limits>
 #include <memory>
+#include <algorithm>
 // POSIX-specific
 #include <fts.h>
 #include <sys/stat.h>
@@ -126,7 +127,6 @@
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 #   include <string>
 #   include <iostream>
-#   include <algorithm>
 #   include <iterator>
 #   include <functional>
 #   include <unordered_set>
