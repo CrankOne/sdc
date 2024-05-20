@@ -25,11 +25,9 @@ def run_loader(executable, path, key):
 
 def main():
     import argparse
-    p = argparse.ArgumentParser( description="An inspector jfor SDC data loding workflow")
-    #p.add_argument( 'inputs', help="Input .yaml files to process. Provided"
-    #        " files are expected to obey format of na64sw event data fields"
-    #        " descrition."
-    #        , nargs=argparse.REMAINDER )
+    p = argparse.ArgumentParser( description="An inspector jfor SDC data loding"
+            " workflow. Has to be used combined with SDC's discover application"
+            " for calibration data inspection and debugging.")
     p.add_argument( '-r', '--exec', help="Executable to run. Specific to data"
             " type (string) to be loaded"
             , type=str, required=True )
@@ -49,6 +47,9 @@ def main():
     #
     # use pandas
     df = pd.DataFrame(data["loadLog"])
+    if df.empty:
+        sys.stderr.write(f"No data loaded for key {args.key} from {args.path}.\n")
+        return 1
     df = pd.pivot( df
         , values='v', columns='c'
         , index=['srcID', 'lineNo']

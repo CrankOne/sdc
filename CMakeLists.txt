@@ -69,6 +69,9 @@ if (BUILD_TESTS)
     add_executable (sdc-discover tests/discover.cc)
     target_link_libraries (sdc-discover ${sdc_LIB})
 
+    add_executable (sdc-inspect tests/inspect-test.cc)
+    target_link_libraries (sdc-inspect ${sdc_LIB})
+
     add_executable (sdc-example-1 tests/tutorial/main-1.cc)
     target_link_libraries (sdc-example-1 ${sdc_LIB})
 

@@ -2314,7 +2314,6 @@ public:
         // We use C++ lambda function to make runtime-polymorphic handler
         // to read the data into statically-derived data structure.
         try {
-            //std::cout << "XXX " << ValidityTraits<KeyT>::to_string(upd.first) << std::endl;  // XXX
             loaderPtr->read_data( docEntryPtr->docID
                   , forKey
                   , CalibDataTraits<T>::typeName
@@ -3121,13 +3120,13 @@ load_from_fs( const std::string & rootpath
                    , upSizeLimitBytes  // (opt) max file size, bytes
                    );
     if(logStreamPtr) {
-        fs.set_logstream(&std::cout);
+        fs.set_logstream(logStreamPtr);
     }
     // use this iterator to fill documents index by recursively traversing FS
     // subtree and pre-parsing all matching files
     size_t nDocsOnIndex = docs.add_from(fs);
     if(logStreamPtr) {
-        std::cout << "Indexed " << nDocsOnIndex << " document(s) at "
+        *logStreamPtr << "Indexed " << nDocsOnIndex << " document(s) at "
             << rootpath
             << " (accept=\"" << acceptPatterns << "\", reject=\""
             << rejectPatterns << ", size=(10-" << upSizeLimitBytes << ")."
@@ -3142,6 +3141,53 @@ load_from_fs( const std::string & rootpath
     // on the origin, so we use a templated wrapper `SrcInfo<T>` here to
     // gain some info on the source document for every entry.
     return docs.template load< DataTypeT >(k);
+}
+
+/**\brief Prints loading log as JSON data (for debugging)
+ *
+ * JSON object writted to stdout contains:
+ *  * "index" -- an information on created index
+ *  * "updates" -- descriptive list of updates queued for loading
+ *  * "loadLog" -- list of loaded items, in order
+ *
+ * Note, that produced JSON object is large and may not be suitable for general
+ * purpose. Main designation of this function is to inspect complex cases on
+ * minified subset of input data.
+ *
+ * For usage example see `inspec_sdc.py` script distributed with SDC sources.
+ * */
+template<typename CalibDataT, typename KeyT> int
+json_loading_log( KeyT key
+                , const std::string docsPath
+                , std::ostream & os
+                ) {
+    sdc::Documents<KeyT> docs;
+    docs.loaders.push_back(std::make_shared<sdc::ExtCSVLoader<KeyT>>());
+    bool added = docs.add(docsPath);
+    if(!added) {
+        std::cerr << "Error: failed to add entries from \""
+            << docsPath << "\"" << std::endl;
+        return 1;
+    }
+    os << "{\"index\":";
+    docs.dump_to_json(os);
+    sdc::aux::LoadLog loadLog;
+    os << ",\"updates\":";
+    auto updates = docs.validityIndex.updates(sdc::CalibDataTraits<CalibDataT>::typeName, key, false);
+    bool isFirst = true;
+    os << "[";
+    typename sdc::CalibDataTraits<CalibDataT>::template Collection<> dest;
+    for(const auto & updEntry : updates) {
+        if(!isFirst) os << ","; else isFirst = false;
+        os << "{\"key\":\"" << sdc::ValidityTraits<KeyT>::to_string(updEntry.first) << "\",\"update\":";
+        updEntry.second->to_json(os);
+        os << "}";
+        docs.template load_update_into<CalibDataT>(updEntry, dest, key, &loadLog);
+    }
+    os << "],\"loadLog\":";
+    loadLog.to_json(os);
+    os << "}";
+    return 0;
 }
 
 
