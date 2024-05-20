@@ -66,6 +66,15 @@ main(int argc, char * argv[]) {
         return 1;
     }
 
-    return sdc::json_loading_log<Foo, RunType>(runNo, docsPath, std::cout);
+    sdc::Documents<RunType> docs;
+    docs.loaders.push_back(std::make_shared<sdc::ExtCSVLoader<RunType>>());
+    bool added = docs.add(docsPath);
+    if(!added) {
+        std::cerr << "Error: failed to add entries from \""
+            << docsPath << "\"" << std::endl;
+        return 1;
+    }
+
+    return sdc::json_loading_log<Foo, RunType>(runNo, docs, std::cout);
 }
 

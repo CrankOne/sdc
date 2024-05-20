@@ -3157,17 +3157,9 @@ load_from_fs( const std::string & rootpath
  * */
 template<typename CalibDataT, typename KeyT> int
 json_loading_log( KeyT key
-                , const std::string docsPath
+                , sdc::Documents<KeyT> & docs
                 , std::ostream & os
                 ) {
-    sdc::Documents<KeyT> docs;
-    docs.loaders.push_back(std::make_shared<sdc::ExtCSVLoader<KeyT>>());
-    bool added = docs.add(docsPath);
-    if(!added) {
-        std::cerr << "Error: failed to add entries from \""
-            << docsPath << "\"" << std::endl;
-        return 1;
-    }
     os << "{\"index\":";
     docs.dump_to_json(os);
     sdc::aux::LoadLog loadLog;
