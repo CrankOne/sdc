@@ -1,13 +1,32 @@
 #/usr/bin/env python
 
-import sys, subprocess, json
-import pandas as pd
-import numpy as np
+"""
+A wrapper script for user's SDC applications to print/query items loading
+sequence. Example:
 
+    $ python3 inspect_sdc.py -r build/sdc-inspect -d tests/assets/test2/one.txt -k2 -cone=uno
+
+Run with to get more detailed usage information.
 """
-$ inspect_sdc.py (-t,--type) <typeName>) (-k,--key) <key> (-d,--dir) <path> \\
-        [-c,--index-column <index1>[=<val1>] [-c,--index-column <index2>[=<val2>]]...]
-"""
+
+import sys, subprocess, json
+
+class ExecutableFailed(RuntimeError):
+    """Thrown in case of application failure"""
+    def __init__(self, cmd, rc):
+        self.cmd = cmd
+        self.rc = rc
+
+class EmptyData(RuntimeError):
+    """Thrown if no data loaded at all by SDC for certain key."""
+    pass
+
+class SelectError(KeyError):
+    """Thrown if slicers (selection) results in no data loaded for such conditions."""
+    def __init__(self, key, slicers):
+        super().__init__(key)
+        self.slicers = slicers
+
 
 def run_loader(executable, path, key):
     """
@@ -17,13 +36,55 @@ def run_loader(executable, path, key):
     p = subprocess.Popen(args, stdout=subprocess.PIPE)
     streamdata = p.communicate()[0]
     if p.returncode:
-        sys.stderr.write(f"Wrapper script exit due to error in the app ({p.returncode})")
-        sys.exit(p.returncode)
+        raise ExecutableFailed(args, p.returncode)
     data = json.loads(streamdata)
-    #print(json.dumps(data, indent=2))
     return data
 
-def main():
+
+def get_load_log_pd(data, indexColumns=None):
+    import pandas as pd
+    if indexColumns is None: indexColumns=[]
+    df = pd.DataFrame(data)
+    if df.empty:
+        raise EmptyData()
+    df = pd.pivot( df
+        , values='v', columns='c'
+        , index=['srcID', 'lineNo']
+        )
+    # apply indexing, if selected
+    idx = None
+    if indexColumns:
+        idx = list(c[0] if type(c) is list else c for c in indexColumns)
+    if idx:
+        df = df.set_index(idx, append=True)
+    # apply slicing, if selected
+    slicers = {}
+    if indexColumns:
+        slicers = dict(filter(lambda c: type(c) is list, indexColumns))
+        # create indexer template (with empty slicers)
+        indexer = [slice(None)]*len(df.index.levels)
+        # add custom slicers
+        for n, idx in slicers.items():
+            indexer[df.index.names.index(n)] = idx
+        try:
+            df = df.loc[tuple(indexer),:]
+        except KeyError as e:
+            raise SelectError(e.args[0], slicers)
+    return df
+    
+
+def print_load_log(data, indexColumns=None, stream=sys.stdout):
+    """
+    Uses pandas to print the data loading log, as retrieved by `run_loader()`.
+    """
+    df = get_load_log_pd(data, indexColumns=indexColumns)
+    stream.write(str(df) + '\n')
+
+
+def instantiate_cmdargs_parser():
+    """
+    Instantiates default command line arguments parser.
+    """
     import argparse
     p = argparse.ArgumentParser( description="An inspector jfor SDC data loding"
             " workflow. Has to be used combined with SDC's discover application"
@@ -37,42 +98,36 @@ def main():
             , type=str, required=True )
     p.add_argument( '-c', '--index-column', help="A column to index data."
             , type=lambda a: [a.split('=')] if '=' in a else [a,] )
-    args = p.parse_args()
+    return p
+
+
+def main(args):
+    """
+    Entry point script, parameterised with parsed standard arguments (see
+    ``instantiate_cmdargs_parser()``.
+    """
     # Load the data for given conditions
-    data = run_loader(args.exec, args.path, args.key)
+    try:
+        data = run_loader(args.exec, args.path, args.key)
+    except ExecutableFailed as e:
+        sys.stderr.write(f"`{' '.join(e.cmd)}' failed with exit code {e.rc}.\n")
+        return e.rc
     # Now in data["loadLog"] we have all the cells parsed from file(s), in
     # order. This data can be represented as a table or dataframe for sorting,
     # querying, etc
-
-    #
-    # use pandas
-    df = pd.DataFrame(data["loadLog"])
-    if df.empty:
-        sys.stderr.write(f"No data loaded for key {args.key} from {args.path}.\n")
+    try:
+        print_load_log(data["loadLog"], indexColumns=args.index_column)
+    except EmptyData as e:
+        sys.stderr.write(f"No data loaded for key \"{args.key}\" from {args.path}.\n")
         return 1
-    df = pd.pivot( df
-        , values='v', columns='c'
-        , index=['srcID', 'lineNo']
-        )
-    # apply indexing, if selected
-    idx = None
-    if args.index_column:
-        idx = list(c[0] if type(c) is list else c for c in args.index_column)
-    if idx:
-        df = df.set_index(idx, append=True)
-    # apply slicing, if selected
-    slicers = {}
-    if args.index_column:
-        slicers = dict(filter(lambda c: type(c) is list, args.index_column))
-        # create indexer template (with empty slicers)
-        indexer = [slice(None)]*len(df.index.levels)
-        # add custom slicers
-        for n, idx in slicers.items():
-            indexer[df.index.names.index(n)] = idx
-        df = df.loc[tuple(indexer),:]
+    except SelectError as e:
+        sys.stderr.write(f"No data loaded for key \"{args.key}\" from {args.path}"
+                f" with selection {e.slicers}: no items for \"{e.args[0]}\"\n")
+        return 1
 
-    sys.stdout.write(str(df) + '\n')
 
 if "__main__" == __name__:
-    sys.exit(main())
+    p = instantiate_cmdargs_parser()
+    args = p.parse_args()
+    sys.exit(main(args))
 
