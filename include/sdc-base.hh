@@ -102,6 +102,7 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <sstream>
 // POSIX-specific
 #include <fts.h>
 #include <sys/stat.h>
@@ -124,7 +125,6 @@
 #   include <iostream>
 #   include <algorithm>
 #   include <limits>
-#   include <sstream>
 #   include <iterator>
 #   include <functional>
 #   include <vector>
@@ -1228,26 +1228,31 @@ struct ColumnsOrder : public std::unordered_map<std::string, int> {
     }
     #endif
 
-    CSVLine interpret(const std::list<std::string> & toks_, LoadLog * loadLogPtr=nullptr) {
-        std::vector<std::string> toks(toks_.begin(), toks_.end());
-        CSVLine l;
-        for( const auto & meaning : *this ) {
-            if(toks.size() <= (unsigned int) meaning.second) {
-                char errBuf[256];
-                snprintf(errBuf, sizeof(errBuf)
-                        , "Columns number mismatch; no column #%d expected"
-                        " for \"%s\" in current line (has only %zu columns)"
-                        , meaning.second + 1, meaning.first.c_str(), toks.size()
-                        );
-                throw errors::ParserError(errBuf);
-            }
-            l[meaning.first] = toks[meaning.second];
-            if(!loadLogPtr) continue;
-            loadLogPtr->add_entry(meaning.first, toks[meaning.second]);
-        }
-        return l;
-    }
+    CSVLine interpret(const std::list<std::string> & toks_, LoadLog * loadLogPtr=nullptr);
 };
+
+#if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
+SDC_INLINE ColumnsOrder::CSVLine
+ColumnsOrder::interpret(const std::list<std::string> & toks_, LoadLog * loadLogPtr) {
+    std::vector<std::string> toks(toks_.begin(), toks_.end());
+    CSVLine l;
+    for( const auto & meaning : *this ) {
+        if(toks.size() <= (unsigned int) meaning.second) {
+            char errBuf[256];
+            snprintf(errBuf, sizeof(errBuf)
+                    , "Columns number mismatch; no column #%d expected"
+                    " for \"%s\" in current line (has only %zu columns)"
+                    , meaning.second + 1, meaning.first.c_str(), toks.size()
+                    );
+            throw errors::ParserError(errBuf);
+        }
+        l[meaning.first] = toks[meaning.second];
+        if(!loadLogPtr) continue;
+        loadLogPtr->add_entry(meaning.first, toks[meaning.second]);
+    }
+    return l;
+}
+#endif
 
 ///\brief Parses columns order definition
 ///
