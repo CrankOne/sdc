@@ -20,7 +20,7 @@ variables:
 # Debug build
 .x-build-stage: &lcg-build-stage
   stage: build
-  tags: [NA64]
+  tags: [cvmfs]
   variables:
     GIT_STRATEGY: clone
   script:
