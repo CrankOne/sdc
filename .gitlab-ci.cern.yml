@@ -67,7 +67,7 @@ variables:
     - make package
     - mv ${CI_PROJECT_NAME}-*-Linux.tar.gz ${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz
     # publish (upload) generic package
-    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz"'
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/$PACKAGE_VERSION.cpack.tar.gz"'
     # publish (upload) corresponding modulefile for CERN CVMFS
     - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file modulefile "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/${PACKAGE_VERSION}.modulefile"'
     - echo "PACKAGE_VERSION=$PACKAGE_VERSION" > ../version.env
@@ -81,6 +81,9 @@ variables:
     # - build/modulefile  # TODO
 
 LCG_105/x86_64-el9-gcc13-dbg-build:
+  <<: *lcg-build-stage
+
+LCG_105/x86_64-el9-gcc13-opt-build:
   <<: *lcg-build-stage
 
 ...
