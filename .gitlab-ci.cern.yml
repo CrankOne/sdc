@@ -70,7 +70,7 @@ variables:
     - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz"'
     # publish (upload) corresponding modulefile for CERN CVMFS
     - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file modulefile "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/${PACKAGE_VERSION}.modulefile"'
-    - echo $PACKAGE_VERSION > ../version.env
+    - echo "PACKAGE_VERSION=$PACKAGE_VERSION" > ../version.env
   artifacts:
     paths:
       - build/*
