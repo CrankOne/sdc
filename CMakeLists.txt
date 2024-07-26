@@ -18,7 +18,7 @@ cmake_minimum_required (VERSION 3.9)
 
 include (cmake/version.cmake)
 get_pkg_version (SDC)
-set (SDC_VERSION ${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR}.${SDC_VERSION_TWEAK})
+set (SDC_VERSION ${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR})
 
 #
 # General Project Features
