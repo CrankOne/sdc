@@ -32,7 +32,7 @@ macro(parse_version_strexpr STREXPR_ PKG_PREFIX)
         # example: "v1.0-2-g6c92bf7"
         set(${PKG_PREFIX}_VERSION_MAJOR ${CMAKE_MATCH_1})
         set(${PKG_PREFIX}_VERSION_MINOR ${CMAKE_MATCH_2})
-        set(${PKG_PREFIX}_VERSION_PATCH 0)
+        set(${PKG_PREFIX}_VERSION_PATCH "")
         set(${PKG_PREFIX}_VERSION_TWEAK ${CMAKE_MATCH_3})
     elseif(${STREXPR_} MATCHES "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)-([0-9]+)-g([a-f0-9]+)$")
         # Case of major, minor, tweak, and commit version
@@ -53,7 +53,7 @@ macro(parse_version_strexpr STREXPR_ PKG_PREFIX)
         # example: "v1.2"
         set(${PKG_PREFIX}_VERSION_MAJOR ${CMAKE_MATCH_1})
         set(${PKG_PREFIX}_VERSION_MINOR ${CMAKE_MATCH_2})
-        set(${PKG_PREFIX}_VERSION_PATCH 0)
+        set(${PKG_PREFIX}_VERSION_PATCH "")
         set(${PKG_PREFIX}_VERSION_TWEAK 0)
     else()
         message(FATAL_ERROR "Failed to get or interpret version number from"
@@ -99,17 +99,17 @@ macro(get_pkg_version PKG_PREFIX)
           "${CMAKE_CURRENT_BINARY_DIR}/version.txt"
           "${${PKG_PREFIX}_VERSION_MAJOR}.${${PKG_PREFIX}_VERSION_MINOR}"
          )
-    if(${${PKG_PREFIX}_VERSION_PATCH} GREATER 0)
+     if(NOT "${${PKG_PREFIX}_VERSION_PATCH}" STREQUAL "")
         file (APPEND
           "${CMAKE_CURRENT_BINARY_DIR}/version.txt"
           ".${${PKG_PREFIX}_VERSION_PATCH}"
          )
-        if(${${PKG_PREFIX}_VERSION_TWEAK} GREATER 0)
-            file (APPEND
-              "${CMAKE_CURRENT_BINARY_DIR}/version.txt"
-              ".${${PKG_PREFIX}_VERSION_TWEAK}"
-             )
-        endif()
+    endif()
+    if(${${PKG_PREFIX}_VERSION_TWEAK} GREATER 0)
+        file (APPEND
+          "${CMAKE_CURRENT_BINARY_DIR}/version.txt"
+          ".${${PKG_PREFIX}_VERSION_TWEAK}"
+         )
     endif()
     set(_DFT_REFS "master" "main" "trunk" "HEAD")
     if(NOT ${${PKG_PREFIX}_REF} IN_LIST _DFT_REFS)
