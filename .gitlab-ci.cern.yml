@@ -65,9 +65,9 @@ variables:
     # build the stuff and pack into the distributable build
     - VERBOSE=1 make -j4
     - make package
-    - mv ${CI_PROJECT_NAME}-*-Linux.tar.gz ${CI_PROJECT_NAME}-$PACKAGE_VERSION.tar.gz
+    - mv ${CI_PROJECT_NAME}-*-Linux.tar.gz ${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz
     # publish (upload) generic package
-    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${CI_PROJECT_NAME}-${PACKAGE_VERSION}.cpack.tar.gz "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/${CI_PROJECT_NAME}-$PACKAGE_VERSION.tar.gz"'
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz"'
     # publish (upload) corresponding modulefile for CERN CVMFS
     - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file modulefile "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/${PACKAGE_VERSION}.modulefile"'
     - echo $PACKAGE_VERSION > ../version.env
