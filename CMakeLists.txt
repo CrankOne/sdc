@@ -14,15 +14,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-cmake_minimum_required (VERSION 2.8.12)
+cmake_minimum_required (VERSION 3.9)
+
+include (cmake/version.cmake)
+get_pkg_version (SDC)
+set (SDC_VERSION ${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR}.${SDC_VERSION_TWEAK})
 
 #
 # General Project Features
-project (sdc)
-
-set (SDC_VERSION_MAJOR 0)
-set (SDC_VERSION_MINOR 2)
-set (SDC_VERSION ${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR})
+project (sdc VERSION ${SDC_VERSION})
 
 #
 # Options
@@ -55,7 +55,7 @@ else (ROOT_FOUND)
     message (STATUS "ROOT is not found; TFormula parsing is not supported.")
 endif (ROOT_FOUND)
 set_target_properties (${sdc_LIB} PROPERTIES VERSION ${SDC_VERSION}
-                       SOVERSION ${SDC_VERSION})
+        SOVERSION ${SDC_VERSION})
 
 configure_file (${CMAKE_CURRENT_SOURCE_DIR}/include/sdc.hh.in
                 ${CMAKE_CURRENT_BINARY_DIR}/include/sdc.hh
