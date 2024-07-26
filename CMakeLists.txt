@@ -18,7 +18,7 @@ cmake_minimum_required (VERSION 3.9)
 
 include (cmake/version.cmake)
 get_pkg_version (SDC)
-set (SDC_VERSION ${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR})
+set (SDC_VERSION ${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR}.${SDC_VERSION_TWEAK})
 
 #
 # General Project Features
@@ -54,8 +54,9 @@ if (ROOT_FOUND)
 else (ROOT_FOUND)
     message (STATUS "ROOT is not found; TFormula parsing is not supported.")
 endif (ROOT_FOUND)
-set_target_properties (${sdc_LIB} PROPERTIES VERSION ${SDC_VERSION}
-        SOVERSION ${SDC_VERSION})
+# for soversion we omit tweak number
+set_target_properties (${sdc_LIB} PROPERTIES VERSION ${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR}
+        SOVERSION ${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR})
 
 configure_file (${CMAKE_CURRENT_SOURCE_DIR}/include/sdc.hh.in
                 ${CMAKE_CURRENT_BINARY_DIR}/include/sdc.hh
@@ -152,6 +153,7 @@ configure_package_config_file (${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
     NO_SET_AND_CHECK_MACRO
     NO_CHECK_REQUIRED_COMPONENTS_MACRO
     )
+# omit tweak version
 write_basic_package_version_file (
     "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}ConfigVersion.cmake"
     VERSION "${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR}"
@@ -173,6 +175,7 @@ include(InstallRequiredSystemLibraries)
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_PACKAGE_VERSION_MAJOR "${SDC_VERSION_MAJOR}")
 set(CPACK_PACKAGE_VERSION_MINOR "${SDC_VERSION_MINOR}")
+set(CPACK_PACKAGE_VERSION_PATCH "${SDC_VERSION_TWEAK}")
 set(CPACK_SOURCE_GENERATOR "TBZ2")
 include(CPack)
 
