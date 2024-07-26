@@ -111,7 +111,7 @@ macro(get_pkg_version PKG_PREFIX)
              )
         endif()
     endif()
-    set(_DFT_REFS "master" "main" "trunk")
+    set(_DFT_REFS "master" "main" "trunk" "HEAD")
     if(NOT ${${PKG_PREFIX}_REF} IN_LIST _DFT_REFS)
         file (APPEND
               "${CMAKE_CURRENT_BINARY_DIR}/version.txt"
