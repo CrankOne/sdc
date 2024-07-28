@@ -99,6 +99,7 @@ LCG_105/x86_64-el9-gcc13-dbg-build:
 
 x86_64-el9-gcc11-dbg-build:
   <<: *lcg-build-stage
+  image: gitlab-registry.cern.ch/p348/na64sw/na64sw-ci-native-alma9
 
 ...
 # vim: set tabstop=2 :
