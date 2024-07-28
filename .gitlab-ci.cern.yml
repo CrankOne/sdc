@@ -12,9 +12,18 @@ variables:
   GIT_DEPTH: 0
 
 .x-deduce-build-configuration: &configure-environment |-
-  export BUILD_ENVIRONMENT=${CI_JOB_NAME%-*}
-  export BUILD_CFG_SUFFIX=${BUILD_ENVIRONMENT##*-}
-  source /cvmfs/na64.cern.ch/sft/${BUILD_ENVIRONMENT}/this-env.sh
+  export BUILD_ENVIRONMENT=${CI_JOB_NAME%-*}  # strip -build/-test, etc
+  export BUILD_CFG_SUFFIX=${BUILD_ENVIRONMENT##*-}  # get -opt/-dbg
+  export LCG_BUILD_RELEASE=${BUILD_ENVIRONMENT%/*}  # get LCG_* from LCG_XXX/xxx
+  if [[ "$LCG_BUILD_RELEASE" == LCG_* ]] ; then
+    export BUILD_ENV_TAG=${$BUILD_ENVIRONMENT/\//.}  # subst / with . in LCG_XXX/xxx and use as a tag
+    echo "Assuming LCG-based build ${BUILD_ENVIRONMENT}"
+    source /cvmfs/na64.cern.ch/sft/${BUILD_ENVIRONMENT}/this-env.sh
+  else
+    export BUILD_ENV_TAG="$BUILD_ENVIRONMENT"  # use x86_64_... as build env tag
+    echo "Assuming vanilla build"
+    export LCG_BUILD_RELEASE=""
+  fi
 
 #
 # Debug build
@@ -67,9 +76,9 @@ variables:
     - make package
     - mv ${CI_PROJECT_NAME}-*-Linux.tar.gz ${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz
     # publish (upload) generic package
-    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/$PACKAGE_VERSION.cpack.tar.gz"'
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/$BUILD_ENV_TAG-$PACKAGE_VERSION.cpack.tar.gz"'
     # publish (upload) corresponding modulefile for CERN CVMFS
-    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file modulefile "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/${PACKAGE_VERSION}.modulefile"'
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file modulefile "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/$BUILD_ENV_TAG-${PACKAGE_VERSION}.modulefile"'
     - echo "PACKAGE_VERSION=$PACKAGE_VERSION" > ../version.env
   artifacts:
     paths:
@@ -83,7 +92,10 @@ variables:
 LCG_105/x86_64-el9-gcc13-dbg-build:
   <<: *lcg-build-stage
 
-LCG_105/x86_64-el9-gcc13-opt-build:
+#LCG_105/x86_64-el9-gcc13-opt-build:
+#  <<: *lcg-build-stage
+
+x86_64-el9-gcc11-dbg-build:
   <<: *lcg-build-stage
 
 ...
