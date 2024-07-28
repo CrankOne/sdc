@@ -13,10 +13,12 @@ variables:
 
 .x-deduce-build-configuration: &configure-environment |-
   export BUILD_ENVIRONMENT=${CI_JOB_NAME%-*}  # strip -build/-test, etc
+  echo "Build environment is ${BUILD_ENVIRONMENT} (for job $CI_JOB_NAME)"
   export BUILD_CFG_SUFFIX=${BUILD_ENVIRONMENT##*-}  # get -opt/-dbg
+  echo "Build configuration is $BUILD_CFG_SUFFIX"
   export LCG_BUILD_RELEASE=${BUILD_ENVIRONMENT%/*}  # get LCG_* from LCG_XXX/xxx
   if [[ "$LCG_BUILD_RELEASE" == LCG_* ]] ; then
-    export BUILD_ENV_TAG=${$BUILD_ENVIRONMENT/\//.}  # subst / with . in LCG_XXX/xxx and use as a tag
+    export BUILD_ENV_TAG=${BUILD_ENVIRONMENT//\//.}  # subst / with . in LCG_XXX/xxx and use as a tag
     echo "Assuming LCG-based build ${BUILD_ENVIRONMENT}"
     source /cvmfs/na64.cern.ch/sft/${BUILD_ENVIRONMENT}/this-env.sh
   else
