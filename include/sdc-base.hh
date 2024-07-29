@@ -1594,7 +1594,7 @@ FS::FS( const std::string & paths_
             case S_IFDIR : _dirPaths.push_back(cpath.c_str()); break;
             case S_IFREG : _standaloneFiles.push_back(cpath.c_str()); break;
             default:
-                std::cerr << "Ignoring path \"" << cpath
+                WARN_LOG << "Ignoring path \"" << cpath
                     << "\" (not a file or directory." << std::endl;
                 // ^^^ TODO: redirect warning
         };
@@ -2697,12 +2697,14 @@ struct CalibDataTraits< SrcInfo<T> > {
     static SrcInfo<T>
     parse_line( const std::string & line
               , size_t lineNo
-              , const aux::MetaInfo & m
+              , const aux::MetaInfo & mi
               , const std::string & filename
               , aux::LoadLog * loadLogPtr=nullptr
               ) {
+        assert(mi.get<size_t>("@lineNo") == lineNo);
+        assert(filename == mi.get<std::string>("@docID", "(undefined)"));
         return SrcInfo<T>{
-                  CalibDataTraits<T>::parse_line(line, lineNo, m, filename)
+                  CalibDataTraits<T>::parse_line(line, lineNo, mi, filename)
                 , lineNo
                 , filename
                 };
