@@ -137,6 +137,17 @@
 // ROOT
 #   ifndef SDC_NO_ROOT
 #       include <TFormula.h>
+#       include <RVersion.h>
+//  Issues reported with TFormula::IsValid() for version 5.x.x. Disable
+//  validation for versions <6.0.0 (alternaitvely, can be forced
+//  with -DSDC_TFORMULA_VALIDATION=0
+#   ifndef SDC_TFORMULA_VALIDATION
+#       if ROOT_VERSION_CODE >= ROOT_VERSION(6, 0, 0)
+#           define SDC_TFORMULA_VALIDATION 1
+#       else
+#           define SDC_TFORMULA_VALIDATION 0
+#       endif
+#   endif
 #   endif
 #else
 // ROOT (forward definitions)
@@ -1020,10 +1031,12 @@ lexical_cast<float>(const std::string & strexpr) SDC_ENDDECL
     #else
     // try to directly evaluate arithmetic expression using TFormula
     TFormula f("tmpFormula", strexpr.c_str());
+    #if defined(SDC_TFORMULA_VALIDATION) && SDC_TFORMULA_VALIDATION
     if( ! f.IsValid() ) {
         throw errors::ParserError( "invalid numerical literal, formula, or"
                 " arithmetic expression", strexpr);
     }
+    #endif
     const double r = f.Eval(0.);
     return r;
     #endif
@@ -1054,10 +1067,12 @@ lexical_cast<double>(const std::string & strexpr) SDC_ENDDECL
     #else
     // try to directly evaluate arithmetic expression using TFormula
     TFormula * f = new TFormula("tmpFormula", strexpr.c_str());
+    #if defined(SDC_TFORMULA_VALIDATION) && SDC_TFORMULA_VALIDATION
     if( ! f->IsValid() ) {
         throw errors::ParserError( "invalid numerical literal, formula, or"
                 " arithmetic expression", strexpr);
     }
+    #endif
     const double r = f->Eval(0.);
     delete f;
     return r;
