@@ -93,13 +93,25 @@ variables:
 
 LCG_105/x86_64-el9-gcc13-dbg-build:
   <<: *lcg-build-stage
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
 
-#LCG_105/x86_64-el9-gcc13-opt-build:
-#  <<: *lcg-build-stage
+LCG_105/x86_64-el9-gcc13-opt-build:
+  <<: *lcg-build-stage
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
 
 x86_64-el9-gcc11-dbg-build:
   <<: *lcg-build-stage
   image: gitlab-registry.cern.ch/p348/na64sw/na64sw-ci-native-alma9
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+
+x86_64-el9-gcc11-opt-build:
+  <<: *lcg-build-stage
+  image: gitlab-registry.cern.ch/p348/na64sw/na64sw-ci-native-alma9
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
 
 ...
 # vim: set tabstop=2 :
