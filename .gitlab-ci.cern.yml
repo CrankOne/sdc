@@ -11,6 +11,11 @@ variables:
   # the latest tag.
   GIT_DEPTH: 0
 
+
+#
+# Templates
+
+# common commands, deducing package build settings based on stage name
 .x-deduce-build-configuration: &configure-environment |-
   export BUILD_ENVIRONMENT=${CI_JOB_NAME%-*}  # strip -build/-test, etc
   echo "Build environment is ${BUILD_ENVIRONMENT} (for job $CI_JOB_NAME)"
@@ -19,16 +24,16 @@ variables:
   export LCG_BUILD_RELEASE=${BUILD_ENVIRONMENT%/*}  # get LCG_* from LCG_XXX/xxx
   if [[ "$LCG_BUILD_RELEASE" == LCG_* ]] ; then
     export BUILD_ENV_TAG=${BUILD_ENVIRONMENT//\//.}  # subst / with . in LCG_XXX/xxx and use as a tag
-    echo "Assuming LCG-based build ${BUILD_ENVIRONMENT}"
-    source /cvmfs/na64.cern.ch/sft/${BUILD_ENVIRONMENT}/this-env.sh
+    echo "Assuming LCG-based build (${BUILD_ENVIRONMENT})"
+    export PLATFORM=${BUILD_ENVIRONMENT}
   else
     export BUILD_ENV_TAG="$BUILD_ENVIRONMENT"  # use x86_64_... as build env tag
-    echo "Assuming vanilla build"
+    echo "Assuming vanilla build (${BUILD_ENV_TAG})"
     export LCG_BUILD_RELEASE=""
+    export PLATFORM=${BUILD_ENV_TAG%-*}
   fi
 
-#
-# Debug build
+# build stage template
 .x-build-stage: &lcg-build-stage
   stage: build
   tags: [cvmfs]
@@ -36,6 +41,7 @@ variables:
     GIT_STRATEGY: clone
   script:
     - *configure-environment
+    - source /cvmfs/na64.cern.ch/sft/${PLATFORM}/this-env.sh
     - 'export CMAKE_BUILD_TYPE=$([[ $BUILD_CFG_SUFFIX = dbg ]] && echo "Debug" || echo "Release")'
     - 'echo "Stage \"${CI_JOB_STAGE}\" is considered as ${BUILD_CFG_SUFFIX} build in ${BUILD_ENVIRONMENT} environment."'
     - 'echo "CMake build type in use: $CMAKE_BUILD_TYPE"'
@@ -68,6 +74,7 @@ variables:
       }
       module-whatis "SDC, v$(cat version.txt) for $BUILD_ENVIRONMENT"
       set prefix /cvmfs/na64.cern.ch/sft/$BUILD_ENVIRONMENT/${CI_PROJECT_NAME}/$PACKAGE_VERSION
+      setenv              sdc_DIR             \prefix
       prepend-path        PATH                \$prefix/bin
       prepend-path        PKG_CONFIG_PATH     \$prefix/lib/pkgconfig
       # vim: set filetype=tcl : 
@@ -81,38 +88,62 @@ variables:
     - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${CI_PROJECT_NAME}-$PACKAGE_VERSION.cpack.tar.gz "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/$BUILD_ENV_TAG-$PACKAGE_VERSION.cpack.tar.gz"'
     # publish (upload) corresponding modulefile for CERN CVMFS
     - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file modulefile "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/$(cat version.txt)/$BUILD_ENV_TAG-${PACKAGE_VERSION}.modulefile"'
-    - echo "PACKAGE_VERSION=$PACKAGE_VERSION" > ../version.env
+    - echo "PACKAGE_VERSION=$PACKAGE_VERSION" > ../dotenv.env
+    - echo "PLATFORM=$PLATFORM" >> ../dotenv.env
   artifacts:
     paths:
-      - build/*
-      #- build/na64sw-*.tar.gz
-      #- build/na64sw-modulefile
+      - build/*.cpack.tar.gz
     reports:
-      dotenv: version.env
-    # - build/modulefile  # TODO
+      dotenv: dotenv.env
 
+# deploy stage template
+# (relies on lpkgm on cvmfs share, see https://gitlab.cern.ch/na64-packaging/lpkgm )
+.x-deploy-stage: &lcg-deploy-stage
+  tags: [cvmfs-na64.cern.ch]
+  stage: deploy
+  script:
+    - $HOME/lpkgm/lpkgm-na64.sh -Dplatform=${PLATFORM} install ${CI_PROJECT_NAME} "${PACKAGE_VERSION}"
+
+
+#
+# Stages
+
+# LCG 105, debug
 LCG_105/x86_64-el9-gcc13-dbg-build:
   <<: *lcg-build-stage
-  rules:
-    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
 
+LCG_105/x86_64-el9-gcc13-dbg-deploy:
+  <<: *lcg-deploy-stage
+  needs: [LCG_105/x86_64-el9-gcc13-dbg-build]
+
+
+# LCG 105, optimized
 LCG_105/x86_64-el9-gcc13-opt-build:
   <<: *lcg-build-stage
-  rules:
-    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
 
+LCG_105/x86_64-el9-gcc13-opt-deploy:
+  <<: *lcg-deploy-stage
+  needs: [LCG_105/x86_64-el9-gcc13-opt-build]
+
+
+# EL9 native, debug
 x86_64-el9-gcc11-dbg-build:
   <<: *lcg-build-stage
   image: gitlab-registry.cern.ch/p348/na64sw/na64sw-ci-native-alma9
-  rules:
-    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
 
+x86_64-el9-gcc11-dbg-deploy:
+  <<: *lcg-deploy-stage
+  needs: [x86_64-el9-gcc11-dbg-build]
+
+
+# EL9 native, optimized
 x86_64-el9-gcc11-opt-build:
   <<: *lcg-build-stage
   image: gitlab-registry.cern.ch/p348/na64sw/na64sw-ci-native-alma9
-  rules:
-    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+
+x86_64-el9-gcc11-opt-deploy:
+  <<: *lcg-deploy-stage
+  needs: [x86_64-el9-gcc11-opt-build]
 
 ...
 # vim: set tabstop=2 :
-
