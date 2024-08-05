@@ -74,7 +74,7 @@ variables:
       }
       module-whatis "SDC, v$(cat version.txt) for $BUILD_ENVIRONMENT"
       set prefix /cvmfs/na64.cern.ch/sft/$BUILD_ENVIRONMENT/${CI_PROJECT_NAME}/$PACKAGE_VERSION
-      setenv              sdc_DIR             \prefix
+      setenv              SDC_PREFIX          \$prefix
       prepend-path        PATH                \$prefix/bin
       prepend-path        PKG_CONFIG_PATH     \$prefix/lib/pkgconfig
       # vim: set filetype=tcl : 
