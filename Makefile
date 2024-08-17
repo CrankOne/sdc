@@ -1,7 +1,7 @@
 # This Makefile can be used on older platforms with CMake issues. If possible,
 # please rely on standard CMake procedure.
 
-CFLAGS=$(shell root-config --cflags)
+CFLAGS+=$(shell root-config --cflags)
 
 all: libsdc.a
 
