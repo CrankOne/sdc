@@ -1,7 +1,7 @@
 #ifndef H_SDC_CONFIG_H
 #define H_SDC_CONFIG_H 1
 
-#define SDC_VERSION "0.3.0"
+#define SDC_VERSION "0.3.1"
 
 #define SQLite3_FOUND 1
 #define SDC_SQL_SCRIPTS_PATH_ENVVAR "SDC_SQL_SCRIPTS_PATH"

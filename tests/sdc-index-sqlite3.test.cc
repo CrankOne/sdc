@@ -48,7 +48,7 @@ TestSQLiteDBIndex::SetUp() {
     free(sql);
 }
 
-TEST_F(TestSQLiteDBIndex, simpleIDs) {
+TEST_F(TestSQLiteDBIndex, basicRetrievalWorks) {
     // check basic queries
     std::vector<db::iSQLIndex::BlockExcerpt> excerpts;
 
@@ -60,7 +60,7 @@ TEST_F(TestSQLiteDBIndex, simpleIDs) {
     EXPECT_FALSE(excerpts.empty());
     excerpts.clear();
 
-    _sqlite->get_update_ids(excerpts, "APVCalib", db::iSQLIndex::gKeyStart, 1500);
+    _sqlite->get_update_ids(excerpts, "APVCalib", db::iSQLIndex::gKeyStart, 1830);
     EXPECT_FALSE(excerpts.empty());
     excerpts.clear();
 }

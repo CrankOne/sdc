@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS blocks (
 
         doc_id INTEGER,  -- FK of the document this block is defined in
         line_start INTEGER,
-        line_end INTEGER,
+        n_lines INTEGER,
         type_id INTEGER,  -- FK of the type this block is defining
         period_id INTEGER, -- FK of the validity period this block is defining
 

@@ -59,9 +59,9 @@ struct iSQLIndex {
             ) = 0;
 
     // ... TODO: whatever else is needed for SQLiteIndex
-};
+};  // struct iSQLIndex
 
-/**\brief DB implementation for the index.
+/**\brief DB implementation of the index.
  *
  * Implements lookup operations using particular SQL database.
  *

@@ -93,7 +93,7 @@ set (sdc_LIB sdc)
 
 set (sdc_SOURCES src/sdc.cc)
 if(SQLite3_FOUND)
-    list(APPEND sdc_SOURCES src/sdc-sqlite3.cc src/sdc-db.c)
+    list(APPEND sdc_SOURCES src/sdc-sqlite3.cc src/sdc-db.c src/sdc-sql.cc)
 endif(SQLite3_FOUND)
 
 add_library (${sdc_LIB} ${sdc_SOURCES})
@@ -152,7 +152,9 @@ if (BUILD_TESTS)
                 tests/sdc-util.test.cc
                 tests/sdc-grammar.test.cc
                 tests/sdc-validity-range.test.cc
-                tests/sdc-incremental-load.test.cc)
+                tests/sdc-incremental-load.test.cc
+                tests/sdc-index.test.cc
+                )
         if(SQLite3_FOUND)
             list(APPEND sdc_tests_SOURCES tests/sdc-index-sqlite3.test.cc)
         endif(SQLite3_FOUND)

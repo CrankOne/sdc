@@ -7,6 +7,12 @@
 namespace sdc {
 namespace db {
 
+/**\brief Implements SQLite3-based driver for calibration index
+ *
+ * This class implements `iSQLIndex` interface providing updates lookup within
+ * an SQLite3 database which `types`, `periods`, `documents`, `metadata` and
+ * `blocks` tables (i.e. `columns` and `entries` tables can be omitted).
+ * */
 class SQLite3 : public iSQLIndex {
 private:
     ::sqlite3 * _db;

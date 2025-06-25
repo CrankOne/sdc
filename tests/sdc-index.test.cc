@@ -1,4 +1,5 @@
-#include "na64calib/sdc.hh"
+#include "sdc-base.hh"
+#include "sdc.hh"
 
 #include <gtest/gtest.h>
 
@@ -321,3 +322,61 @@ TEST_F(TestingIndex, HandlesEmptyUpdateOnOutOfRange ) {
                 , sdc::errors::NoCalibrationData );
 }
 
+TEST(Updates, complexCaseProperlySorted) {
+    typedef sdc::iValidityIndex<int, sdc::iDocuments<int>::DocumentLoadingState>::DocumentEntry
+        DocumentEntry;
+    typedef sdc::iValidityIndex<int, sdc::iDocuments<int>::DocumentLoadingState>::Updates
+        Updates;
+
+    std::list<std::pair<std::string, size_t>> excPaths = {
+        {"one/1",       12},
+        {"three/c",     10},
+        {"two/b",       10},
+        {"two/z/seven", 10},
+        {"three/b",     10},
+        {"two/a",       10},
+        {"three/a",     10},
+        {"one/2",       10},
+        {"two/z/seven", 15},
+        {"one/1",       10},
+    };
+
+    std::vector<std::pair<std::string, size_t>> chck = {
+        {"three/a", 10}, {"three/b", 10}, {"three/c", 10},
+        {"two/z/seven", 10}, {"two/z/seven", 15},
+        {"two/a", 10}, {"two/b", 10},
+        {"one/1", 10}, {"one/1", 12}, {"one/2", 10}
+    };
+    ASSERT_EQ(chck.size(), excPaths.size());
+
+    std::vector<std::string> bases = {
+        "three/",
+        "two/z",
+        "two/",
+        "one"
+    };
+
+    {
+        std::list<DocumentEntry> updStorage;
+        Updates upds;
+        for(const auto & pp: excPaths) {
+            DocumentEntry docEntry;
+            docEntry.docID = pp.first;
+            docEntry.auxInfo.dataBlockBgn = pp.second;
+            updStorage.push_back(docEntry);
+            upds.push_back({123, &updStorage.back()});
+        }
+
+        sdc::iDocuments<int>::sort_updates(upds, bases);
+
+        ASSERT_EQ(upds.size(), excPaths.size());
+
+        size_t nEl = 0;
+        for(const auto & item : upds) {
+            EXPECT_EQ(item.second->docID, chck[nEl].first);
+            EXPECT_EQ(item.second->auxInfo.dataBlockBgn, chck[nEl].second)
+                << " element #" << nEl << " (" << chck[nEl].first << ")";
+            ++nEl;
+        }
+    }
+}

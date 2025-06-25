@@ -2043,7 +2043,7 @@ struct iValidityIndex {
         latest( const std::string & typeName
               , KeyT key
               ) const = 0;
-};
+};  // class iValidityIndex<>
 
 /**\brief Basic storage for document entries, supporting typical queries
  *
@@ -2352,6 +2352,19 @@ struct iDocuments {
     // Utility functions based on iface
     //
 
+    /**\brief Reorders updates list based on the longest matching prefix from a
+     *        list of base paths.
+     *
+     * Within each prefix group (defined by item from `basePaths`, entries are
+     * sorted first by docID (alphabetically), then by auxInfo.dataBlockBgn
+     * (ascending).
+     *
+     * \throws std::runtime_error if a docID does not match any prefix.
+     * */
+    static void sort_updates(
+              typename iValidityIndex<KeyT, DocumentLoadingState>::Updates & updatesList
+            , const std::vector<std::string> & basePaths );
+
     // TODO: doc
     template<typename T> void
     load_update_into( const typename ValidityIndex< KeyT
@@ -2431,14 +2444,17 @@ struct iDocuments {
     ///
     /// This methood queries indexes for "still valid" data of certain type
     /// (see `ValidityIndex::updates()`) and performs sequential loading of
-    /// those entries.
+    /// those entries, respecting the sequence of base paths.
     ///
     /// Useful for partially-defined data that must be updated incrementally.
     template<typename T> typename CalibDataTraits<T>::template Collection<>
-    load( KeyT key, bool noTypeIsOk=false, aux::LoadLog * loadLogPtr=nullptr) const {
+    load( KeyT key
+        , const std::vector<std::string> & basePaths
+        , bool noTypeIsOk=false, aux::LoadLog * loadLogPtr=nullptr) const {
         typename CalibDataTraits<T>::template Collection<> dest;
-        const auto updates = validity_index().updates(
+        auto updates = validity_index().updates(
                 CalibDataTraits<T>::typeName, key, noTypeIsOk );
+        sort_updates(updates, basePaths);
         for( const auto & upd : updates ) {
             load_update_into<T>(upd, dest, key, loadLogPtr);
         }
@@ -2448,20 +2464,71 @@ struct iDocuments {
     ///\brief Loads "most recent" calibration data entry
     ///
     /// This methood queries indexes for "most recent" data of certain type
-    /// (see `ValidityIndex::latest()`) and loads it.
+    /// (see `ValidityIndex::latest()`) and loads it, respecting the sequence
+    /// of base paths.
     ///
     /// Useful for data that is expected to be fully defined in single
     /// document.
     template<typename T> typename CalibDataTraits<T>::template Collection<>
-    get_latest(KeyT key, aux::LoadLog * loadLogPtr=nullptr) const {
+    get_latest(KeyT key
+              , const std::vector<std::string> & basePaths
+              , aux::LoadLog * loadLogPtr=nullptr) const {
         typename CalibDataTraits<T>::template Collection<> dest;
-        load_update_into<T>( validity_index().latest(CalibDataTraits<T>::typeName, key)
+        auto updates = validity_index().latest(CalibDataTraits<T>::typeName, key);
+        sort_updates(updates, basePaths);
+        load_update_into<T>( updates
                             , dest
                             , key
                             , loadLogPtr );
         return dest;
     }
 };  // struct iDocuments<KeyT>
+
+
+template<typename KeyT> void
+iDocuments<KeyT>::sort_updates(
+          typename iValidityIndex<KeyT, DocumentLoadingState>::Updates & updatesList
+        , const std::vector<std::string> & basePaths
+        ) {
+    using ExcerptIter = typename iValidityIndex<KeyT, DocumentLoadingState>::Updates::iterator;
+    // Group iterators by matched basePath
+    std::map<std::string, std::vector<ExcerptIter>> grouped;
+    for (ExcerptIter it = updatesList.begin(); it != updatesList.end(); ++it) {
+        const auto doc = it->second;
+        const std::string& path = doc->docID;
+        const std::string* bestMatch = nullptr;
+        size_t bestLen = 0;
+        for (const std::string& base : basePaths) {
+            if( path.size() >= base.size() && path.compare(0, base.size(), base) == 0
+             && base.size() > bestLen) {
+                bestMatch = &base;
+                bestLen = base.size();
+            }
+        }
+        if (!bestMatch) throw std::runtime_error("No matching base path for docID: " + path);
+        grouped[*bestMatch].push_back(it);
+    }
+    // Reconstruct the list
+    typename iValidityIndex<KeyT, DocumentLoadingState>::Updates reordered;
+    for (const auto& base : basePaths) {
+        auto it = grouped.find(base);
+        if (it != grouped.end()) {
+            auto& vec = it->second;
+            // Sort by docID, then dataBlockBgn
+            std::sort(vec.begin(), vec.end(), [](ExcerptIter a, ExcerptIter b) {
+                const auto& da = a->second;
+                const auto& db = b->second;
+                if (da->docID != db->docID)
+                    return da->docID < db->docID;
+                return da->auxInfo.dataBlockBgn < db->auxInfo.dataBlockBgn;
+            });
+            for (ExcerptIter ei : vec) {
+                reordered.splice(reordered.end(), updatesList, ei);
+            }
+        }
+    }
+    updatesList.swap(reordered);
+}
 
 /**\brief Representation of calibration data documents collection
  *
@@ -3183,7 +3250,7 @@ public:  // iLoader interface implementation
  * */
 template<typename KeyT, typename DataTypeT>
 typename CalibDataTraits<DataTypeT>::template Collection<DataTypeT>
-load_from_fs( const std::string & rootpath
+load_from_fs( const std::string & rootpaths
             , KeyT k
             , const std::string & acceptPatterns="*.txt:*.dat"
             , const std::string & rejectPatterns="*.swp:*.swo:*.bak:*.BAK:*.bck:~*:*-orig.txt:*.dev"
@@ -3191,7 +3258,7 @@ load_from_fs( const std::string & rootpath
             , std::ostream * logStreamPtr=nullptr
             ) {
     // 1. SETUP
-    // create calibration document index by run number
+    // create in-memory (C++) calibration document index by run number
     sdc::Documents<KeyT> docs;
     // Create a loader object and add it to the index for automated binding.
     // This type of loader (ExtCSVLoader) is pretty generic one and implies
@@ -3203,26 +3270,35 @@ load_from_fs( const std::string & rootpath
     //     discovered files to have `CaloCellCalib` data type by default:
     extCSVLoader->defaults.dataType = CalibDataTraits<DataTypeT>::typeName;
 
-    // create filesystem iterator to walk through all the dirs and their
-    // subdirs looking for files matching certain wildcards and size criteria
-    sdc::aux::FS fs( rootpath
-                   , acceptPatterns // (opt) accept patterns
-                   , rejectPatterns // (opt) reject patterns
-                   , 10  // (opt) min file size, bytes
-                   , upSizeLimitBytes  // (opt) max file size, bytes
-                   );
-    if(logStreamPtr) {
-        fs.set_logstream(logStreamPtr);
+    // tokenize base path(s) assuming `rootpaths` to be a column-delimited list
+    std::vector<std::string> prefixes;
+    {
+        const auto lst = aux::tokenize(rootpaths, ':');
+        prefixes = std::vector<std::string>(lst.begin(), lst.end());
     }
-    // use this iterator to fill documents index by recursively traversing FS
-    // subtree and pre-parsing all matching files
-    size_t nDocsOnIndex = docs.add_from(fs);
-    if(logStreamPtr) {
-        *logStreamPtr << "Indexed " << nDocsOnIndex << " document(s) at "
-            << rootpath
-            << " (accept=\"" << acceptPatterns << "\", reject=\""
-            << rejectPatterns << ", size=(10-" << upSizeLimitBytes << ")."
-            << std::endl;
+
+    for(const auto & rootpath: prefixes) {
+        // create filesystem iterator to walk through all the dirs and their
+        // subdirs looking for files matching certain wildcards and size criteria
+        sdc::aux::FS fs( rootpath
+                       , acceptPatterns // (opt) accept patterns
+                       , rejectPatterns // (opt) reject patterns
+                       , 10  // (opt) min file size, bytes
+                       , upSizeLimitBytes  // (opt) max file size, bytes
+                       );
+        if(logStreamPtr) {
+            fs.set_logstream(logStreamPtr);
+        }
+        // use this iterator to fill documents index by recursively traversing FS
+        // subtree and pre-parsing all matching files
+        size_t nDocsOnIndex = docs.add_from(fs);
+        if(logStreamPtr) {
+            *logStreamPtr << "Indexed " << nDocsOnIndex << " document(s) at "
+                << rootpath
+                << " (accept=\"" << acceptPatterns << "\", reject=\""
+                << rejectPatterns << ", size=(10-" << upSizeLimitBytes << ")."
+                << std::endl;
+        }
     }
 
     // 2. LOAD DATA FOR CERTAIN RUN ID
@@ -3232,7 +3308,7 @@ load_from_fs( const std::string & rootpath
     // However, for `CaloCellCalib` it is requested to apply additional check
     // on the origin, so we use a templated wrapper `SrcInfo<T>` here to
     // gain some info on the source document for every entry.
-    return docs.template load< DataTypeT >(k);
+    return docs.template load< DataTypeT >(k, prefixes);
 }
 
 /**\brief Prints loading log as JSON data (for debugging)
