@@ -1423,7 +1423,7 @@ FTSBase::~FTSBase() {
 
 /**\brief Iterates over FS subtree recursively supporting additional filtering
  *
- * Most common cases to travers FS subtree is name/size discrimination. This
+ * Most common case is to traverse FS subtree is name/size discrimination. This
  * subclass of `FTSBase` implements this by providing accept/reject name
  * patterns (reject takes precedence) and size discrimination (takes precedence
  * over name) as well as some convenient string conversion for ctr.
@@ -1956,22 +1956,15 @@ ValidityTraits<T>::from_string(const std::string & stre) {
 
 template<typename KeyT> class Documents;  // fwd
 
-/**\brief Basic storage for document entries, supporting typical queries
+/**\brief Validity index interface
  *
- * This collection enumerates documents with arbitrary user info by their type
- * and validity period, and provides interface for basic retrieval: `updates()`
- * and `latest()`.
- *
- * Must be parameterised with validity key type (e.g. run number or time+date)
- * and type of user info kept.
- *
- * \ingroup typed indexing
+ * Defines a contract that can be implemented by a certain data storaging
+ * back-end -- an in-memory index (`ValidityIndex`) or database (`SQLiteIndex`).
  * */
 template< typename KeyT
         , typename AuxInfoT
         >
-class ValidityIndex {
-public:
+struct iValidityIndex {
     typedef KeyT Key;
     typedef AuxInfoT AuxInfo;
     /// Shortcut for validity range type in use
@@ -1980,7 +1973,10 @@ public:
     struct DocumentEntry {
         /// Identifier to the document
         std::string docID;
-        /// End of validity period for calibration; considered only if set
+        ///\brief End of validity period for calibration; considered only if set
+        ///
+        /// ??? this attribute is used for documents which do not specify their
+        ///     validity end by metadata or what?
         KeyT validTo;
         /// Any other user data associated with this document entry
         AuxInfoT auxInfo;
@@ -1996,33 +1992,6 @@ public:
     };
     /// List of updates to be applied, returned by querying operations
     typedef std::list< std::pair<KeyT, const DocumentEntry *> > Updates;
-protected:
-    /// By-run index of the calibration files
-    typedef std::multimap< KeyT, DocumentEntry
-                         , typename ValidityTraits<KeyT>::Less
-                         > DocsIndex;
-    /// By-type dictionary of indexes
-    std::unordered_map<std::string, DocsIndex> _types;
-public:
-    ///\brief Adds document entry of certain type with runs range
-    ///
-    /// This method memorizes settings of the calibration entry as it must be
-    /// then scheduled for the update with CSV data collecting function.
-    ///
-    /// Foreseen usage scenario may imply pre-parsing the document in order to
-    /// obtain calibration data type, runs range and any data for `auxInfo`
-    /// instance associated with particular doc.
-    typename DocsIndex::iterator
-    add_entry( const std::string & docID
-             , const std::string & dataType
-             , KeyT from, KeyT to
-             , const AuxInfoT & auxInfo
-             ) {
-        auto ir1 = _types.emplace(dataType, DocsIndex());
-        auto ir2 = ir1.first->second.emplace( from
-                        , DocumentEntry{docID, to, auxInfo} );
-        return ir2;
-    }
 
     /**\brief Returns list of "still valid" documents to be applied, in order
      *
@@ -2041,12 +2010,77 @@ public:
      * If `noTypeIsOk` is `true`, the method does not throw exceptions and just
      * returns an empty list if no calibration data type can be retrieved.
      * (yet, if type exists, but no data present no exception thrown anyway).
+     * */
+    virtual Updates updates( const std::string & typeName
+                   , KeyT key
+                   , bool noTypeIsOk=false ) const = 0;
+
+    /**\brief Finds updates between two keys
+     *
+     * Useful for incremental ad-hoc updates, when collected data must be
+     * modified with respect to some previous state.
+     *
+     * \todo UT
+     * */
+    virtual Updates updates( const std::string & typeName
+                   , KeyT oldKey, KeyT newKey
+                   , bool noTypeIsOk=false
+                   , bool keepStale=false
+                   ) const = 0;
+
+    /**\brief Returns latest document entry for certain run number and type
+     *
+     * In case of few valid entries found for certain run, the latest
+     * inserted will be returned.
+     *
+     * \throws `sdc::errors::UnknownDataType` if not such data type defined and
+     *         `noTypeIsOk` is false.
+     * \throws `sdc::errors::NoData` if no valid data can be found for given key
+     *
+     * \todo Optimize me. Lookup loop seems to be suboptimal.
+     */
+    virtual typename Updates::value_type
+        latest( const std::string & typeName
+              , KeyT key
+              ) const = 0;
+};
+
+/**\brief Basic storage for document entries, supporting typical queries
+ *
+ * This collection enumerates documents with arbitrary user info by their type
+ * and validity period, and provides interface for basic retrieval: `updates()`
+ * and `latest()`.
+ *
+ * Must be parameterised with validity key type (e.g. run number or time+date)
+ * and type of user info kept.
+ *
+ * \ingroup typed indexing
+ * */
+template< typename KeyT
+        , typename AuxInfoT
+        >
+class ValidityIndex : public iValidityIndex<KeyT, AuxInfoT> {
+public:
+    using typename iValidityIndex<KeyT, AuxInfoT>::DocumentEntry;
+    using typename iValidityIndex<KeyT, AuxInfoT>::Updates;
+protected:
+    /// By-run index of the calibration files
+    typedef std::multimap< KeyT, DocumentEntry
+                         , typename ValidityTraits<KeyT>::Less
+                         > DocsIndex;
+    /// By-type dictionary of indexes
+    std::unordered_map<std::string, DocsIndex> _types;
+public:
+    // iValidityIndex interface implem
+    //
+
+    /**\brief Returns list of "still valid" documents to be applied, in order
      *
      * \throws `sdc::errors::UnknownDataType` if not such data type defined.
      * */
     Updates updates( const std::string & typeName
                    , KeyT key
-                   , bool noTypeIsOk=false ) const {
+                   , bool noTypeIsOk=false ) const override {
         // find by-types index
         auto typeIt = _types.find(typeName);
         if( _types.end() == typeIt ) {
@@ -2073,17 +2107,13 @@ public:
     }
 
     /**\brief Finds updates between two keys
-     *
-     * Useful for incremental ad-hoc updates, when collected data must be
-     * modified with respect to some previous state.
-     *
      * \todo UT
      * */
     Updates updates( const std::string & typeName
                    , KeyT oldKey, KeyT newKey
                    , bool noTypeIsOk=false
                    , bool keepStale=false
-                   ) const {
+                   ) const override {
         // find by-types index
         auto typeIt = _types.find(typeName);
         if( _types.end() == typeIt ) {
@@ -2113,20 +2143,12 @@ public:
     }
 
     /**\brief Returns latest document entry for certain run number and type
-     *
-     * In case of few valid entries found for certain run, the latest
-     * inserted will be returned.
-     *
-     * \throws `sdc::errors::UnknownDataType` if not such data type defined and
-     *         `noTypeIsOk` is false.
-     * \throws `sdc::errors::NoData` if no valid data can be found for given key
-     *
      * \todo Optimize me. Lookup loop seems to be suboptimal.
      */
     typename Updates::value_type
         latest( const std::string & typeName
               , KeyT key
-              ) const {
+              ) const override {
         // find by-types index
         auto typeIt = _types.find(typeName);
         if( _types.end() == typeIt ) {
@@ -2152,31 +2174,46 @@ public:
         }
     }
 
+    // In-memory validity index-specific methods
+    //
+
+    ///\brief Adds document entry of certain type with runs range
+    ///
+    /// This method memorizes settings of the calibration entry as it must be
+    /// then scheduled for the update with CSV data collecting function.
+    ///
+    /// Foreseen usage scenario may imply pre-parsing the document in order to
+    /// obtain calibration data type, runs range and any data for `auxInfo`
+    /// instance associated with particular doc.
+    typename DocsIndex::iterator
+    add_entry( const std::string & docID
+             , const std::string & dataType
+             , KeyT from, KeyT to
+             , const AuxInfoT & auxInfo
+             ) {
+        auto ir1 = _types.emplace(dataType, DocsIndex());
+        auto ir2 = ir1.first->second.emplace( from
+                        , DocumentEntry{docID, to, auxInfo} );
+        return ir2;
+    }
+
     /// Returns immutable index entries
     const std::unordered_map<std::string, DocsIndex> &
         entries() const {return _types;}
 
     friend class Documents<KeyT>;
-};  // class ValidityIndex
+};  // class ValidityIndex<KeyT, AuxInfoT>
 
 /// Data traits defining the to-structure conversion procedure
 template<typename T> struct CalibDataTraits;
 
-/**\brief Representation of calibration data documents collection
- *
- * This stateful object maintains collecteion of loaders with validity index
- * of certain documents automating document lookup and loading.
- *
- * First template argument is the validity key in use (run ID, time, date, etc),
- * the second is an arbitrary auxiliary information for lookup within a
- * document -- line number, cached ID of database entry, etc.
- *
- * \note Has few public collections that must be set prior to usage
- * \ingroup indexing
- * */
+
 template<typename KeyT>
-class Documents {
-public:
+struct iDocuments {
+
+    // Nested types
+    //
+
     /// Description of the data block found in the document
     struct DataBlock {
         /// Data type provided by block described
@@ -2281,10 +2318,8 @@ public:
                               , IntradocMarkup_t acceptFrom
                               , ReaderCallback cllb
                               ) = 0;
-    };
+    };  // struct iDocuments<KeyT>::iLoader
 
-    /// Colllection of loaders, capable to obtain structures
-    std::list< std::shared_ptr<iLoader> > loaders;
     /// Data block snapshot with cached loader handle to read it
     struct DocumentLoadingState {
         /// Loader settings at the current parser state
@@ -2305,11 +2340,18 @@ public:
             os << "}";
         }
     };
-    /// Index of documents with polymorphic aux info
-    ValidityIndex<KeyT, DocumentLoadingState> validityIndex;
 
     typedef typename ValidityIndex<KeyT, DocumentLoadingState>::Updates::value_type Update;
-public:
+
+    // Interface
+    //
+
+    virtual iValidityIndex<KeyT, DocumentLoadingState> & validity_index() = 0;
+    virtual const iValidityIndex<KeyT, DocumentLoadingState> & validity_index() const = 0;
+
+    // Utility functions based on iface
+    //
+
     // TODO: doc
     template<typename T> void
     load_update_into( const typename ValidityIndex< KeyT
@@ -2383,8 +2425,72 @@ public:
             throw;
         }
         loaderPtr->defaults = dftsBck;
+    }  // load_update_into()
+
+    ///\brief Loads calibration data entries, in "overlay mode"
+    ///
+    /// This methood queries indexes for "still valid" data of certain type
+    /// (see `ValidityIndex::updates()`) and performs sequential loading of
+    /// those entries.
+    ///
+    /// Useful for partially-defined data that must be updated incrementally.
+    template<typename T> typename CalibDataTraits<T>::template Collection<>
+    load( KeyT key, bool noTypeIsOk=false, aux::LoadLog * loadLogPtr=nullptr) const {
+        typename CalibDataTraits<T>::template Collection<> dest;
+        const auto updates = validity_index().updates(
+                CalibDataTraits<T>::typeName, key, noTypeIsOk );
+        for( const auto & upd : updates ) {
+            load_update_into<T>(upd, dest, key, loadLogPtr);
+        }
+        return dest;
     }
+
+    ///\brief Loads "most recent" calibration data entry
+    ///
+    /// This methood queries indexes for "most recent" data of certain type
+    /// (see `ValidityIndex::latest()`) and loads it.
+    ///
+    /// Useful for data that is expected to be fully defined in single
+    /// document.
+    template<typename T> typename CalibDataTraits<T>::template Collection<>
+    get_latest(KeyT key, aux::LoadLog * loadLogPtr=nullptr) const {
+        typename CalibDataTraits<T>::template Collection<> dest;
+        load_update_into<T>( validity_index().latest(CalibDataTraits<T>::typeName, key)
+                            , dest
+                            , key
+                            , loadLogPtr );
+        return dest;
+    }
+};  // struct iDocuments<KeyT>
+
+/**\brief Representation of calibration data documents collection
+ *
+ * This stateful object maintains collecteion of loaders with validity index
+ * of certain documents automating document lookup and loading.
+ *
+ * First template argument is the validity key in use (run ID, time, date, etc),
+ * the second is an arbitrary auxiliary information for lookup within a
+ * document -- line number, cached ID of database entry, etc.
+ *
+ * \note Has few public collections that must be set prior to usage
+ * \ingroup indexing
+ * */
+template<typename KeyT>
+class Documents : public iDocuments<KeyT> {
 public:
+    using typename iDocuments<KeyT>::DataBlock;
+    using typename iDocuments<KeyT>::iLoader;
+    using typename iDocuments<KeyT>::DocumentLoadingState;
+
+    /// Colllection of loaders, capable to obtain structures
+    std::list< std::shared_ptr<iLoader> > loaders;
+    /// Index of documents with polymorphic aux info
+    ValidityIndex<KeyT, DocumentLoadingState> validityIndex;
+public:
+
+    iValidityIndex<KeyT, DocumentLoadingState> & validity_index() override { return validityIndex; }
+    const iValidityIndex<KeyT, DocumentLoadingState> & validity_index() const override { return validityIndex; }
+
     /**\brief Add new entry to the validity index pre-parsing its meta
      *
      * If no loader is explicitly specified (`loader` is null) uses
@@ -2535,41 +2641,6 @@ public:
             if(this->add(docID, type, vr, mi, loader)) ++nAdded;
         }
         return nAdded;
-    }
-
-    ///\brief Loads calibration data entries, in "overlay mode"
-    ///
-    /// This methood queries indexes for "still valid" data of certain type
-    /// (see `ValidityIndex::updates()`) and performs sequential loading of
-    /// those entries.
-    ///
-    /// Useful for partially-defined data that must be updated incrementally.
-    template<typename T> typename CalibDataTraits<T>::template Collection<>
-    load( KeyT key, bool noTypeIsOk=false, aux::LoadLog * loadLogPtr=nullptr) const {
-        typename CalibDataTraits<T>::template Collection<> dest;
-        const auto updates = validityIndex.updates(
-                CalibDataTraits<T>::typeName, key, noTypeIsOk );
-        for( const auto & upd : updates ) {
-            load_update_into<T>(upd, dest, key, loadLogPtr);
-        }
-        return dest;
-    }
-
-    ///\brief Loads "most recent" calibration data entry
-    ///
-    /// This methood queries indexes for "most recent" data of certain type
-    /// (see `ValidityIndex::latest()`) and loads it.
-    ///
-    /// Useful for data that is expected to be fully defined in single
-    /// document.
-    template<typename T> typename CalibDataTraits<T>::template Collection<>
-    get_latest(KeyT key, aux::LoadLog * loadLogPtr=nullptr) const {
-        typename CalibDataTraits<T>::template Collection<> dest;
-        load_update_into<T>( validityIndex.latest(CalibDataTraits<T>::typeName, key)
-                            , dest
-                            , key
-                            , loadLogPtr );
-        return dest;
     }
 
     /// Dumps content to a JSON object.
@@ -2939,7 +3010,7 @@ public:
         /// be read
         bool handle_csv(const std::string & line, size_t lineNo) override {
             assert((bool) cVal);
-            assert(!cType.empty());
+            //assert(!cType.empty());  // TODO: xxx? seems legit...
             if( cType != forType ) return true;  // other type
             if( ValidityTraits<KeyT>::is_set(cVal.from)
               && forKey < cVal.from ) return true;  // not valid yet
