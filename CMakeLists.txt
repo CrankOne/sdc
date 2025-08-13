@@ -37,53 +37,53 @@ find_package(GTest QUIET)
 find_package(ROOT QUIET COMPONENTS MathCore)
 
 # For SQLite3 DB index and or cache
-find_package(SQlite3 QUIET)
+#find_package(SQlite3 QUIET)
 # -- XXX -- XXX -- XXX ---
 # FindSQLite3.cmake can be unavailable on the system (e.g. on Debian-based
 # ones). This is the literal copy of the FindSQLite3.cmake found in modern
 # CMake distributions. Will be deleted in future.
-if(NOT SQLite3_FOUND)
-    find_package(PkgConfig REQUIRED)
-    if(PKG_CONFIG_FOUND)
-        pkg_check_modules(PC_SQLite3 QUIET sqlite3)
-        # Look for the necessary header
-    find_path(SQLite3_INCLUDE_DIR NAMES sqlite3.h
-      HINTS
-        ${PC_SQLite3_INCLUDE_DIRS}
-    )
-    mark_as_advanced(SQLite3_INCLUDE_DIR)
-    # Look for the necessary library
-    find_library(SQLite3_LIBRARY NAMES sqlite3 sqlite
-      HINTS
-        ${PC_SQLite3_LIBRARY_DIRS}
-    )
-    mark_as_advanced(SQLite3_LIBRARY)
-    # Extract version information from the header file
-    if(SQLite3_INCLUDE_DIR)
-        file(STRINGS ${SQLite3_INCLUDE_DIR}/sqlite3.h _ver_line
-             REGEX "^#define SQLITE_VERSION  *\"[0-9]+\\.[0-9]+\\.[0-9]+\""
-             LIMIT_COUNT 1)
-        string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+"
-               SQLite3_VERSION "${_ver_line}")
-        unset(_ver_line)
-    endif()
-    include(FindPackageHandleStandardArgs)
-    find_package_handle_standard_args(SQLite3
-        REQUIRED_VARS SQLite3_LIBRARY SQLite3_INCLUDE_DIR
-        VERSION_VAR SQLite3_VERSION)
-    # Create the imported target
-    if(SQLite3_FOUND)
-        set(SQLite3_INCLUDE_DIRS ${SQLite3_INCLUDE_DIR})
-        set(SQLite3_LIBRARIES ${SQLite3_LIBRARY})
-        if(NOT TARGET SQLite::SQLite3)
-            add_library(SQLite::SQLite3 UNKNOWN IMPORTED)
-            set_target_properties(SQLite::SQLite3 PROPERTIES
-                IMPORTED_LOCATION             "${SQLite3_LIBRARY}"
-                INTERFACE_INCLUDE_DIRECTORIES "${SQLite3_INCLUDE_DIR}")
-        endif()
-    endif()
-    endif(PKG_CONFIG_FOUND)
-endif(NOT SQLite3_FOUND)
+#if(NOT SQLite3_FOUND)
+#    find_package(PkgConfig REQUIRED)
+#    if(PKG_CONFIG_FOUND)
+#        pkg_check_modules(PC_SQLite3 QUIET sqlite3)
+#        # Look for the necessary header
+#    find_path(SQLite3_INCLUDE_DIR NAMES sqlite3.h
+#      HINTS
+#        ${PC_SQLite3_INCLUDE_DIRS}
+#    )
+#    mark_as_advanced(SQLite3_INCLUDE_DIR)
+#    # Look for the necessary library
+#    find_library(SQLite3_LIBRARY NAMES sqlite3 sqlite
+#      HINTS
+#        ${PC_SQLite3_LIBRARY_DIRS}
+#    )
+#    mark_as_advanced(SQLite3_LIBRARY)
+#    # Extract version information from the header file
+#    if(SQLite3_INCLUDE_DIR)
+#        file(STRINGS ${SQLite3_INCLUDE_DIR}/sqlite3.h _ver_line
+#             REGEX "^#define SQLITE_VERSION  *\"[0-9]+\\.[0-9]+\\.[0-9]+\""
+#             LIMIT_COUNT 1)
+#        string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+"
+#               SQLite3_VERSION "${_ver_line}")
+#        unset(_ver_line)
+#    endif()
+#    include(FindPackageHandleStandardArgs)
+#    find_package_handle_standard_args(SQLite3
+#        REQUIRED_VARS SQLite3_LIBRARY SQLite3_INCLUDE_DIR
+#        VERSION_VAR SQLite3_VERSION)
+#    # Create the imported target
+#    if(SQLite3_FOUND)
+#        set(SQLite3_INCLUDE_DIRS ${SQLite3_INCLUDE_DIR})
+#        set(SQLite3_LIBRARIES ${SQLite3_LIBRARY})
+#        if(NOT TARGET SQLite::SQLite3)
+#            add_library(SQLite::SQLite3 UNKNOWN IMPORTED)
+#            set_target_properties(SQLite::SQLite3 PROPERTIES
+#                IMPORTED_LOCATION             "${SQLite3_LIBRARY}"
+#                INTERFACE_INCLUDE_DIRECTORIES "${SQLite3_INCLUDE_DIR}")
+#        endif()
+#    endif()
+#    endif(PKG_CONFIG_FOUND)
+#endif(NOT SQLite3_FOUND)
 # -- XXX -- XXX -- XXX ---
 
 # To compress data in cache
@@ -110,7 +110,7 @@ target_include_directories (${sdc_LIB}
     PUBLIC $<INSTALL_INTERFACE:include>
     )
 if(SQLite3_FOUND)
-    target_link_libraries(${sdc_LIB} PRIVATE SQLite::SQLite3)
+    target_link_libraries(${sdc_LIB} PUBLIC SQLite::SQLite3)
 endif(SQLite3_FOUND)
 if(SNAPPY_FOUND)
     target_include_directories(${sdc_LIB} ${SNAPPY_INCLUDE_DIR})

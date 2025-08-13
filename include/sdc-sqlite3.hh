@@ -39,11 +39,12 @@ protected:
     int _check_prepare( const char * strStmt, ::sqlite3_stmt *&stmt);
     int _check_step(::sqlite3_stmt *);
     int _step(SQLite3Helper &);
-    const size_t _encKeyLen;
+    //const size_t _encKeyLen;
 public:
     SQLite3( const char * dbname
-           , size_t encodedKeyLength
-           , std::ostream * sqlEvalLog=nullptr);
+           //, size_t encodedKeyLength
+           , std::ostream * sqlEvalLog=nullptr
+           );
     ~SQLite3();
 
     ::sqlite3 * get_sqlite3_db_ptr() { return _db; }

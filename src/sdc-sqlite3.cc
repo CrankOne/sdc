@@ -243,11 +243,11 @@ SQLite3::_step(SQLite3Helper & h) {
 }
 
 SQLite3::SQLite3(const char * dbname
-        , size_t encodedKeyLength
+        //, size_t encodedKeyLength
         , std::ostream * sqlEvalLog)
             : _db(nullptr)
             , _sqlEvalLog(sqlEvalLog)
-            , _encKeyLen(encodedKeyLength)
+            //, _encKeyLen(encodedKeyLength)
             {
     if(_sqlEvalLog) {
         *_sqlEvalLog << "Opening SQLite3 DB \"" << dbname << "\"." << std::endl;
