@@ -98,7 +98,9 @@
 #include <map>
 #include <set>
 #include <fstream>
+#include <cstring>
 #include <iomanip>
+#include <cstdint>
 #include <cmath>
 #include <cstring>
 #include <functional>
