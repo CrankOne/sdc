@@ -2,15 +2,37 @@
 
 #include "sdc-base.hh"
 #include "sdc-db.h"
+#include "sdc-fs.hh"
 
+#include <limits>
+#include <type_traits>
 #include <vector>
 #include <unordered_map>
 
 namespace sdc {
+namespace errors {
+class SQLDBError : public RuntimeError {
+public:
+    SQLDBError(const char * msg) : RuntimeError(msg) {}
+};
+}  // namspace ::sdc::errors
 namespace db {
 
 typedef unsigned long EncodedDBKey_t;  // TODO: document, build-aprameterised
-template<typename T> struct ValidityKeyTraits;
+constexpr EncodedDBKey_t gUnsetKeyEncoded = std::numeric_limits<EncodedDBKey_t>::max();
+inline bool key_is_unset(EncodedDBKey_t v) { return v == gUnsetKeyEncoded;}
+
+template<typename T, typename EnableT=void> struct ValidityKeyTraits;
+
+template<typename T>
+struct ValidityKeyTraits<T, typename std::enable_if<std::is_integral<T>::value>::type> {
+    static EncodedDBKey_t encode(T v) {
+        return sdc::ValidityTraits<T>::is_set(v) ? v : gUnsetKeyEncoded;
+    }
+    static T decode(EncodedDBKey_t v) {
+        return sdc::ValidityTraits<T>::is_set(v) ? v : gUnsetKeyEncoded;
+    }
+};
 
 // Alias eponymous C definition from global ns to sdc::
 typedef ::sdc_ItemID            ItemID;
@@ -25,7 +47,6 @@ typedef ::sdc_EntryRecord       EntryRecord;
 
 struct iSQLIndex {
     virtual ~iSQLIndex() {}
-    static constexpr EncodedDBKey_t gKeyStart = 0;
 
     struct BlockExcerpt {
         /// ID of the document
@@ -51,14 +72,34 @@ struct iSQLIndex {
 
     ///\brief Loads information necessary to build
     ///       generic `iValidityIndex<>::DocumentEntry`
-    /// 
     virtual void load_doc_entry_info(ItemID docID
             , std::string & defaultDataType
             , EncodedDBKey_t & dftFrom, EncodedDBKey_t & dftTo
             , aux::MetaInfo & docMetaData
             ) = 0;
 
-    // ... TODO: whatever else is needed for SQLiteIndex
+    /// Should return `true` if type with this name exists
+    virtual bool has_type(const std::string & typeName) = 0;
+
+    ///\brief Returns ID of existing document with given path
+    /// \throws `errors::...` if document does not exists
+    virtual ItemID get_document_id(const std::string & docPath) = 0;
+
+    ///\brief Returns ID of type by name (creates or finds)
+    virtual ItemID ensure_type(const std::string &) = 0;
+
+    ///\brief Returns ID of period (existing or newly created)
+    virtual ItemID ensure_period(EncodedDBKey_t from, EncodedDBKey_t to) = 0;
+
+    virtual ItemID add_block(ItemID docID, ItemID typeID, ItemID periodID
+                        , size_t blockBegin
+                        ) = 0;
+
+    // ... TODO: doc
+    virtual ItemID add_document(const std::string & path
+        , const utils::DocumentProperties & docProps
+        , ItemID defaultTypeID
+        , ItemID defaultPeriodID) = 0;
 };  // struct iSQLIndex
 
 /**\brief DB implementation of the index.
@@ -86,11 +127,14 @@ private:
     mutable std::unordered_map<ItemID, typename iValidityIndex<KeyT
                 , typename iDocuments<KeyT>::DocumentLoadingState>::DocumentEntry *> _docs;
     /// (cache) reentrant vector to avoid reallocs
-    mutable std::vector<ItemID> _itemIDs;
+    mutable std::vector<iSQLIndex::BlockExcerpt> _updateRecords;
 public:
+    SQLValidityIndex(iSQLIndex & sqlDB) : _sqlDB(sqlDB) {}
+    SQLValidityIndex(const SQLValidityIndex<KeyT> &) =delete;
+
     Updates load_doc_details_into_updates_list(KeyT key
             , const std::vector<iSQLIndex::BlockExcerpt> & updatesInfo
-            ) {
+            ) const {
         Updates res;
         if(updatesInfo.empty()) return res;
         for(auto & updateInfo: updatesInfo) {
@@ -109,14 +153,14 @@ public:
                 _sqlDB.load_doc_entry_info(updateInfo.docID
                         , auxInfo.docDefaults.dataType
                         , dftFrom, dftTo
-                        , auxInfo.baseMD
+                        , auxInfo.docDefaults.baseMD
                         );
                 auxInfo.dataBlockBgn = updateInfo.blockBgn;
                 auxInfo.loader = nullptr;                // TODO pick suitable loader?
                 auxInfo.docDefaults.validityRange
-                    = ValidityRange<KeyT>( ValidityKeyTraits<KeyT>::decode(dftFrom)
+                    = ValidityRange<KeyT>{ ValidityKeyTraits<KeyT>::decode(dftFrom)
                             , ValidityKeyTraits<KeyT>::decode(dftFrom)
-                            );
+                        };
 
                 auto docEntry
                     = new typename iValidityIndex<KeyT, typename iDocuments<KeyT>::DocumentLoadingState>::DocumentEntry{
@@ -124,12 +168,12 @@ public:
                             , ValidityKeyTraits<KeyT>::decode(updateInfo.toKey)
                             , auxInfo
                         };
-                auto ir = _docs.emplace(updateInfo.docID, &docEntry);
-                assert(ir.first);
-                it = ir.second;
+                auto ir = _docs.emplace(updateInfo.docID, docEntry);
+                assert(ir.second);
+                it = ir.first;
             }
             // load document entry from DB index
-            res.emplace(key, it->second);
+            res.push_back({key, it->second});
         }
         return res;
     }
@@ -142,16 +186,18 @@ public:
     Updates updates( const std::string & typeName
                    , KeyT key
                    , bool noTypeIsOk=false ) const override {
-        // TODO: noTypeIsOk
-        _itemIDs.clear();
-        _sqlDB.get_update_ids( _itemIDs
+        if(!noTypeIsOk) {
+            if(!_sqlDB.has_type(typeName)) {
+                throw sdc::errors::UnknownDataType(typeName);
+            }
+        }
+        _updateRecords.clear();
+        _sqlDB.get_update_ids( _updateRecords
                     , typeName
-                    , iSQLIndex::gKeyStart
+                    , gUnsetKeyEncoded
                     , ValidityKeyTraits<KeyT>::encode(key)
-                    , noTypeIsOk
-                    , true
                     );
-        return load_doc_details_into_updates_list(_itemIDs);
+        return load_doc_details_into_updates_list(key, _updateRecords);
     }
 
     ///\brief Queries updates between two keys
@@ -164,15 +210,19 @@ public:
                    , bool noTypeIsOk=false
                    , bool keepStale=false
                    ) const override {
-        // TODO: noTypeIsOk
+        if(!noTypeIsOk) {
+            if(!_sqlDB.has_type(typeName)) {
+                throw sdc::errors::UnknownDataType(typeName);
+            }
+        }
         // TODO: keepStale
-        _itemIDs.clear();
-        _sqlDB.get_update_ids( _itemIDs
+        _updateRecords.clear();
+        _sqlDB.get_update_ids( _updateRecords
                     , typeName
                     , ValidityKeyTraits<KeyT>::encode(oldKey)
                     , ValidityKeyTraits<KeyT>::encode(newKey)
                     );
-        return load_doc_details_into_updates_list(_itemIDs);
+        return load_doc_details_into_updates_list(newKey, _updateRecords);
     }
 
     ///\brief Queries latest document entry for certain run number and type,
@@ -182,13 +232,34 @@ public:
               , KeyT key
               ) const override {
         // TODO: test it
-        _itemIDs.clear();
-        _sqlDB.get_update_ids( _itemIDs
+        _updateRecords.clear();
+        _sqlDB.get_update_ids( _updateRecords
                     , typeName
-                    , ValidityKeyTraits<KeyT>::keyStart
+                    , gUnsetKeyEncoded
                     , ValidityKeyTraits<KeyT>::encode(key)
                     );
-        return load_doc_details_into_updates_list(_itemIDs);
+        throw std::runtime_error("TODO: return latest update");
+        //return load_doc_details_into_updates_list(key, _updateRecords);
+    }
+
+    ///\brief Adds entry to an index
+    ///
+    /// Upserts document and type if they do not exist.
+    void
+    add_entry( const std::string & docPath
+             , const std::string & dataType
+             , KeyT from_, KeyT to_
+             , const typename iDocuments<KeyT>::DocumentLoadingState & docLoadingState
+             ) override {
+        EncodedDBKey_t from = ValidityKeyTraits<KeyT>::encode(from_)
+                     , to = ValidityKeyTraits<KeyT>::encode(to_)
+                     ;
+        ItemID docID    = _sqlDB.get_document_id(docPath);
+        ItemID typeID   = _sqlDB.ensure_type(docPath);
+        ItemID periodID = _sqlDB.ensure_period(from, to);
+        _sqlDB.add_block( docID, typeID, periodID
+                        , docLoadingState.dataBlockBgn
+                        );
     }
 };
 

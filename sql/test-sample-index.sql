@@ -46,20 +46,18 @@ INSERT INTO metadata (id, doc_id, line, key, value)
 VALUES (4, 2, 30, 'comments', 'Test data set');
 
 -- insert a few blocks to reference types and periods (if blocks table is involved)
-INSERT INTO blocks (id, doc_id, line_start, n_lines, type_id, period_id)
+INSERT INTO blocks (id, doc_id, line_start, type_id, period_id)
 VALUES (1,
     1,  -- in doc #1
     1,  -- line start
-    50, -- of n lines
     1,  -- of type SADCCalib
     1   -- valid in 1st period (1000-1999)
 );
 
-INSERT INTO blocks (id, doc_id, line_start, n_lines, type_id, period_id)
+INSERT INTO blocks (id, doc_id, line_start, type_id, period_id)
 VALUES (2,
     2,  -- in doc #2
     1,  -- line start
-    50, -- of n lines
     2,  -- of type APVCalib
     4   -- valid in 3rd period (1800-2200)
 );

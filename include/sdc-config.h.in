@@ -4,6 +4,10 @@
 #cmakedefine SDC_VERSION "@SDC_VERSION@"
 
 #cmakedefine01 SQLite3_FOUND
+#cmakedefine01 SNAPPY_FOUND
+#cmakedefine01 ZLIB_FOUND
+#cmakedefine01 OPENSSL_FOUND
+
 #cmakedefine SDC_SQL_SCRIPTS_PATH_ENVVAR "@SDC_SQL_SCRIPTS_PATH_ENVVAR@"
 
 #ifndef SDC_NO_ROOT

@@ -10,7 +10,5 @@
 namespace sdc {
 namespace db {
 
-// ...
-
 }  // namespace db
 }  // namespace sdc

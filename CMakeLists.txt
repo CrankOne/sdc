@@ -36,6 +36,7 @@ find_package(PkgConfig)
 find_package(GTest QUIET)
 find_package(ROOT QUIET COMPONENTS MathCore)
 
+# For SQLite3 DB index and or cache
 find_package(SQlite3 QUIET)
 # -- XXX -- XXX -- XXX ---
 # FindSQLite3.cmake can be unavailable on the system (e.g. on Debian-based
@@ -85,13 +86,19 @@ if(NOT SQLite3_FOUND)
 endif(NOT SQLite3_FOUND)
 # -- XXX -- XXX -- XXX ---
 
+# To compress data in cache
+find_package(Snappy QUIET)  # SNAPPY_FOUND
+find_package(ZLIB QUIET)  # ZLIB_FOUND
+# To obtain checksums
+find_package(OpenSSL QUIET)  # OPENSSL_FOUND
+
 #
 # Library
 add_compile_options (-Wall)
 
 set (sdc_LIB sdc)
 
-set (sdc_SOURCES src/sdc.cc)
+set (sdc_SOURCES src/sdc.cc src/sdc-fs.cc)
 if(SQLite3_FOUND)
     list(APPEND sdc_SOURCES src/sdc-sqlite3.cc src/sdc-db.c src/sdc-sql.cc)
 endif(SQLite3_FOUND)
@@ -105,6 +112,16 @@ target_include_directories (${sdc_LIB}
 if(SQLite3_FOUND)
     target_link_libraries(${sdc_LIB} PRIVATE SQLite::SQLite3)
 endif(SQLite3_FOUND)
+if(SNAPPY_FOUND)
+    target_include_directories(${sdc_LIB} ${SNAPPY_INCLUDE_DIR})
+    target_link_libraries(${sdc_LIB} PRIVATE ${SNAPPY_LIBRARY})
+endif(SNAPPY_FOUND)
+if(ZLIB_FOUND)
+    target_link_libraries(${sdc_LIB} PRIVATE ${ZLIB_LIBRARIES})
+endif(ZLIB_FOUND)
+if(OPENSSL_FOUND)
+    target_link_libraries(${sdc_LIB} PRIVATE ${OPENSSL_LIBRARIES})
+endif(OPENSSL_FOUND)
 # Force -fPIC or similar, to prevent clashes in applications that need it
 set_property(TARGET ${sdc_LIB} PROPERTY POSITION_INDEPENDENT_CODE ON)
 if (ROOT_FOUND)

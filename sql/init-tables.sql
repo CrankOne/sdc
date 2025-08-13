@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS periods (
 --      a set of properties (*columns*) defined
 CREATE TABLE IF NOT EXISTS types (
         id INTEGER PRIMARY KEY,
-        name VARCHAR(127)  -- SDC_DB_MAX_LEN_DATA_TYPE_NAME
+        name VARCHAR(127),  -- SDC_DB_MAX_LEN_DATA_TYPE_NAME
+
+        UNIQUE(name)
     );
 
 -- document source used to obtain the data
@@ -57,7 +59,6 @@ CREATE TABLE IF NOT EXISTS blocks (
 
         doc_id INTEGER,  -- FK of the document this block is defined in
         line_start INTEGER,
-        n_lines INTEGER,
         type_id INTEGER,  -- FK of the type this block is defining
         period_id INTEGER, -- FK of the validity period this block is defining
 

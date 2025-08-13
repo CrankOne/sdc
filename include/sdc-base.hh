@@ -1965,18 +1965,20 @@ template< typename KeyT
         , typename AuxInfoT
         >
 struct iValidityIndex {
+    virtual ~iValidityIndex() {}
     typedef KeyT Key;
     typedef AuxInfoT AuxInfo;
     /// Shortcut for validity range type in use
     typedef ValidityRange<KeyT> Range;
     /// A data type of the document kept
+    ///
+    /// This item represents a single ASCII block within a document, not the
+    /// single document. It has `validTo` attribute referring to the validity
+    /// period end for efficient lookup.
     struct DocumentEntry {
         /// Identifier to the document
         std::string docID;
-        ///\brief End of validity period for calibration; considered only if set
-        ///
-        /// ??? this attribute is used for documents which do not specify their
-        ///     validity end by metadata or what?
+        ///\brief End of validity period for the entry; considered only if set
         KeyT validTo;
         /// Any other user data associated with this document entry
         AuxInfoT auxInfo;
@@ -2043,6 +2045,21 @@ struct iValidityIndex {
         latest( const std::string & typeName
               , KeyT key
               ) const = 0;
+
+    ///\brief Adds document entry of certain type with runs range
+    ///
+    /// This method memorizes settings of the calibration entry as it must be
+    /// then scheduled for the update with CSV data collecting function.
+    ///
+    /// Foreseen usage scenario may imply pre-parsing the document in order to
+    /// obtain calibration data type, runs range and any data for `auxInfo`
+    /// instance associated with particular doc.
+    virtual void
+    add_entry( const std::string & docID
+             , const std::string & dataType
+             , KeyT from, KeyT to
+             , const AuxInfoT & auxInfo
+             ) = 0;
 };  // class iValidityIndex<>
 
 /**\brief Basic storage for document entries, supporting typical queries
@@ -2174,28 +2191,21 @@ public:
         }
     }
 
-    // In-memory validity index-specific methods
-    //
-
-    ///\brief Adds document entry of certain type with runs range
-    ///
-    /// This method memorizes settings of the calibration entry as it must be
-    /// then scheduled for the update with CSV data collecting function.
-    ///
-    /// Foreseen usage scenario may imply pre-parsing the document in order to
-    /// obtain calibration data type, runs range and any data for `auxInfo`
-    /// instance associated with particular doc.
-    typename DocsIndex::iterator
+    ///\brief Adds document entry of certain type with runs range into
+    ///       in-memory maps
+    void
     add_entry( const std::string & docID
              , const std::string & dataType
              , KeyT from, KeyT to
              , const AuxInfoT & auxInfo
-             ) {
+             ) override {
         auto ir1 = _types.emplace(dataType, DocsIndex());
-        auto ir2 = ir1.first->second.emplace( from
+        /*auto ir2 = */ir1.first->second.emplace( from
                         , DocumentEntry{docID, to, auxInfo} );
-        return ir2;
     }
+
+    // In-memory validity index-specific methods
+    //
 
     /// Returns immutable index entries
     const std::unordered_map<std::string, DocsIndex> &
@@ -2348,9 +2358,82 @@ struct iDocuments {
 
     virtual iValidityIndex<KeyT, DocumentLoadingState> & validity_index() = 0;
     virtual const iValidityIndex<KeyT, DocumentLoadingState> & validity_index() const = 0;
+    virtual bool add_document( const std::string & docID
+            , const std::pair<bool, std::string> & defaultType
+            , const std::pair<bool, ValidityRange<KeyT>> & defaultValidity
+            , const std::pair<bool, aux::MetaInfo> & mi
+            , std::shared_ptr<iLoader> loader
+            ) = 0;
 
     // Utility functions based on iface
     //
+
+    /// Forwards to `add_document()` (provides default args)
+    bool add( const std::string & docID
+            , const std::pair<bool, std::string> & defaultType={false, ""}
+            , const std::pair<bool, ValidityRange<KeyT>> & defaultValidity={false, { KeyT(ValidityTraits<KeyT>::unset)
+                                                                                   , KeyT(ValidityTraits<KeyT>::unset)}}
+            , const std::pair<bool, aux::MetaInfo> & mi={false, {}}
+            , std::shared_ptr<iLoader> loader=nullptr
+            ) {
+        return add_document(docID, defaultType, defaultValidity
+                , mi, loader);
+    }
+
+    /**\brief Uses callable (generator) instance to add multiple documents
+     *
+     * This version explotis of simple string-only returning generator and
+     * sequentially passes (using `add()`) through all the document IDs
+     * returned untill generator returns empty string.
+     *
+     * \returns number of documents added to the index with given generator.
+     * */
+    size_t
+    add_from( std::function<std::string ()> && callable ) {
+        size_t nAdded = 0;
+        std::string docID;
+        while(!(docID = callable()).empty()) {
+            if(this->add(docID)) ++nAdded;
+        }
+        return nAdded;
+    }
+
+    /**\brief Uses callable (generator) instance to add multiple documents with
+     *      modified metadata
+     *
+     * This version explotis generator returning document ID (as string),
+     * type and metadata. The generator will be considered as empty when
+     * its callable instance will return an empty string.
+     *
+     * First bool flag in paried parameters is the same as in
+     * `Documents::add()` -- it is used to override the defaults at
+     * the beginning of document parsing: when flag is set, default type or
+     * default validity range will be set to provided ones. When flag is not
+     * set, loader's default values will be used.
+     *
+     * \returns number of documents added to the index with given generator.
+     * */
+    size_t
+    add_from( std::function<std::string ( std::pair<bool, std::string> &
+                                        , std::pair<bool, ValidityRange<KeyT>> &
+                                        , std::pair<bool, aux::MetaInfo> &
+                                        , std::shared_ptr<iLoader> & loader
+                                        ) > && callable ) {
+        size_t nAdded = 0;
+        for(;;) {
+            std::string docID;
+            std::pair<bool, std::string> type = {false, ""};
+            std::pair<bool, ValidityRange<KeyT>> vr
+                    = {false, {ValidityTraits<KeyT>::unset, ValidityTraits<KeyT>::unset}};
+            std::pair<bool, aux::MetaInfo> mi = {false, {}};
+            std::shared_ptr<iLoader> loader = nullptr;
+
+            docID = callable(type, vr, mi, loader);
+            if(docID.empty()) break;
+            if(this->add(docID, type, vr, mi, loader)) ++nAdded;
+        }
+        return nAdded;
+    }
 
     /**\brief Reorders updates list based on the longest matching prefix from a
      *        list of base paths.
@@ -2579,13 +2662,12 @@ public:
      * or no meaningful data can be read from the documents with current
      * loaders.
      */
-    bool add( const std::string & docID
-            , const std::pair<bool, std::string> & defaultType={false, ""}
-            , const std::pair<bool, ValidityRange<KeyT>> & defaultValidity={false, { KeyT(ValidityTraits<KeyT>::unset)
-                                                                                   , KeyT(ValidityTraits<KeyT>::unset)}}
-            , const std::pair<bool, aux::MetaInfo> & mi={false, {}}
-            , std::shared_ptr<iLoader> loader=nullptr
-            ) {
+    bool add_document( const std::string & docID
+            , const std::pair<bool, std::string> & defaultType
+            , const std::pair<bool, ValidityRange<KeyT>> & defaultValidity
+            , const std::pair<bool, aux::MetaInfo> & mi
+            , std::shared_ptr<iLoader> loader
+            ) override {
         if(!loader) {
             for( auto h : loaders ) {
                 if( !h->can_handle(docID) ) continue;
@@ -2653,61 +2735,6 @@ public:
             loader->defaults = prevDfts;
             throw;
         }
-    }
-
-    /**\brief Uses callable (generator) instance to add multiple documents
-     *
-     * This version explotis of simple string-only returning generator and
-     * sequentially passes (using `add()`) through all the document IDs
-     * returned untill generator returns empty string.
-     *
-     * \returns number of documents added to the index with given generator.
-     * */
-    size_t
-    add_from( std::function<std::string ()> && callable ) {
-        size_t nAdded = 0;
-        std::string docID;
-        while(!(docID = callable()).empty()) {
-            if(this->add(docID)) ++nAdded;
-        }
-        return nAdded;
-    }
-
-    /**\brief Uses callable (generator) instance to add multiple documents with
-     *      modified metadata
-     *
-     * This version explotis generator returning document ID (as string),
-     * type and metadata. The generator will be considered as empty when
-     * its callable instance will return an empty string.
-     *
-     * First bool flag in paried parameters is the same as in
-     * `Documents::add()` -- it is used to override the defaults at
-     * the beginning of document parsing: when flag is set, default type or
-     * default validity range will be set to provided ones. When flag is not
-     * set, loader's default values will be used.
-     *
-     * \returns number of documents added to the index with given generator.
-     * */
-    size_t
-    add_from( std::function<std::string ( std::pair<bool, std::string> &
-                                        , std::pair<bool, ValidityRange<KeyT>> &
-                                        , std::pair<bool, aux::MetaInfo> &
-                                        , std::shared_ptr<iLoader> & loader
-                                        ) > && callable ) {
-        size_t nAdded = 0;
-        for(;;) {
-            std::string docID;
-            std::pair<bool, std::string> type = {false, ""};
-            std::pair<bool, ValidityRange<KeyT>> vr
-                    = {false, {ValidityTraits<KeyT>::unset, ValidityTraits<KeyT>::unset}};
-            std::pair<bool, aux::MetaInfo> mi = {false, {}};
-            std::shared_ptr<iLoader> loader = nullptr;
-
-            docID = callable(type, vr, mi, loader);
-            if(docID.empty()) break;
-            if(this->add(docID, type, vr, mi, loader)) ++nAdded;
-        }
-        return nAdded;
     }
 
     /// Dumps content to a JSON object.
