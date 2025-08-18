@@ -127,8 +127,9 @@ set_property(TARGET ${sdc_LIB} PROPERTY POSITION_INDEPENDENT_CODE ON)
 if (ROOT_FOUND)
     target_include_directories (${sdc_LIB} SYSTEM PUBLIC ${ROOT_INCLUDE_DIRS} )
     target_link_libraries (${sdc_LIB} PUBLIC ${ROOT_LIBRARIES})
+    message(STATUS "ROOT found, ${ROOT_INCLUDE_DIRS}")
 else (ROOT_FOUND)
-    message (STATUS "ROOT is not found; TFormula parsing is not supported.")
+    message (WARNING "ROOT is not found; TFormula parsing is not supported.")
 endif (ROOT_FOUND)
 # for soversion we omit tweak number
 set_target_properties (${sdc_LIB} PROPERTIES VERSION ${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR}
@@ -210,7 +211,7 @@ endif (BUILD_TESTS)
 #
 # (Un)install
 set_target_properties (${sdc_LIB} PROPERTIES PUBLIC_HEADER
-    "${CMAKE_CURRENT_BINARY_DIR}/include/sdc.hh;include/sdc-base.hh")
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/sdc-config.h;include/sdc-base.hh")
 include (GNUInstallDirs)
 install (TARGETS ${sdc_LIB}
     EXPORT ${CMAKE_PROJECT_NAME}Targets
