@@ -25,14 +25,7 @@
  * codes.
  * */
 
-#cmakedefine SDC_VERSION "@SDC_VERSION@"
-
-#ifndef SDC_NO_ROOT
-#   cmakedefine01 ROOT_FOUND
-#   if !ROOT_FOUND
-#       define SDC_NO_ROOT 1
-#   endif
-#endif
+//#include "sdc-config.h"
 
 #ifndef SDC_NO_IMPLEM
 #   define SDC_NO_IMPLEM 1

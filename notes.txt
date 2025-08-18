@@ -1,0 +1,47 @@
+This branch provides a draft for the attempt of serializing indeces to a DB.
+It is semi-working, but to continue we need some refactoring.
+The restriction that we have to overcome is that the serialized key currently
+is stored as INTEGER (int64).
+
+To overcome this we have two options:
+
+1. set key type as BLOB with custom function:
+
+SELECT id FROM documents WHERE my_key_less(keyFrom, ?) = 1;
+SELECT id FROM documents WHERE my_key_eq(keyFrom, ?) = 1;
+
+in C:
+
+    int my_key_less(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+        const void *a = sqlite3_value_blob(argv[0]);
+        int a_len = sqlite3_value_bytes(argv[0]);
+        const void *b = sqlite3_value_blob(argv[1]);
+        int b_len = sqlite3_value_bytes(argv[1]);
+
+        if (a_len != sizeof(Key_t) || b_len != sizeof(Key_t)) {
+            sqlite3_result_null(ctx);
+            return;
+        }
+
+        const Key_t *ka = (const Key_t *)a;
+        const Key_t *kb = (const Key_t *)b;
+
+        sqlite3_result_int(ctx, key_less_than(ka, kb));
+    }
+
+register function:
+
+    sqlite3_create_function(db, "my_key_less", 2, SQLITE_UTF8, NULL, my_key_less, NULL, NULL);
+    sqlite3_create_function(db, "my_key_eq", 2, SQLITE_UTF8, NULL, my_key_eq, NULL, NULL);
+
+queries become:
+
+    SELECT id FROM documents WHERE my_key_less(keyFrom, ?) = 1;
+
+works with indexes:
+
+    CREATE INDEX idx_keyFrom_lt ON documents(my_key_less(keyFrom, ?));
+
+2. Use custom SQLite virtual table
+Seems quite complicated
+

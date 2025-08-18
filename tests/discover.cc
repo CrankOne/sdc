@@ -141,7 +141,7 @@ main(int argc, char * argv[]) {
     // different ranges and that's how collections of entries can be
     // retrieved (note that collection type is the `Collection` template from
     // traits above):
-    std::list<Foo> entries = docs.load<Foo>(runNo);
+    std::list<Foo> entries = docs.load<Foo>(runNo, {docsPath});
 
     std::cout << "Loaded " << entries.size() << " entries for run #" << runNo << " (one: two three):" << std::endl;
     for(const auto & entry : entries) {

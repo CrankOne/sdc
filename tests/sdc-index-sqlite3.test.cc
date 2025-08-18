@@ -1,73 +1,187 @@
-#include "sdc-base.hh"
-#include "sdc.hh"
-
+#include <cstdlib>
 #include <gtest/gtest.h>
+#include <stdexcept>
 
-// This file tests general updates querying for index object.
-// No type information on the particular document is required at this level.
+#include "sdc-base.hh"
+#include "sdc-sql.hh"
+#include "sdc-sqlite3.hh"
+#include "sdc-db.h"
+
+namespace sdc {
+namespace test {
+
+// Basic SQLite3 fixture
+//
+
+class TestSQLiteDB : public testing::Test {
+protected:
+    db::SQLite3 * _sqlite;
+public:
+    void SetUp() override;
+    void TearDown() override;
+};
+
+void
+TestSQLiteDB::SetUp() {
+    _sqlite = new db::SQLite3(":memory:");
+}
+
+void
+TestSQLiteDB::TearDown() {
+    delete _sqlite;
+}
+
+// SQLite3 fixture with index sample data
+//
+
+class TestSQLiteDBIndex : public TestSQLiteDB {
+public:
+    void SetUp() override;
+};
+
+void
+TestSQLiteDBIndex::SetUp() {
+    TestSQLiteDB::SetUp();
+    char * sql = NULL;
+    int rc = sdc_read_sql_file("test-sample-index.sql", &sql);
+    ASSERT_EQ(rc, 0);
+    _sqlite->execute(sql);
+    free(sql);
+}
+
+TEST_F(TestSQLiteDBIndex, basicRetrievalWorks) {
+    // check basic queries
+    std::vector<db::iSQLIndex::BlockExcerpt> excerpts;
+
+    _sqlite->get_update_ids(excerpts, "SADCCalib", db::gUnsetKeyEncoded, 123);
+    EXPECT_TRUE(excerpts.empty());
+    excerpts.clear();
+
+    _sqlite->get_update_ids(excerpts, "SADCCalib", db::gUnsetKeyEncoded, 1001);
+    EXPECT_FALSE(excerpts.empty());
+    excerpts.clear();
+
+    _sqlite->get_update_ids(excerpts, "APVCalib", db::gUnsetKeyEncoded, 1830);
+    EXPECT_FALSE(excerpts.empty());
+    excerpts.clear();
+}
+
+}  // namespace ::sdc::test
+}  // namespace sdc
+
+//
+//
 
 // Just an ampty index to test trivial case
 // --
 // Still important case for basic functions.
-class EmptyTestingIndex : public ::testing::Test
-                        , public ::sdc::ValidityIndex<int, sdc::aux::MetaInfo>
-                        {};
+class EmptyTestingSQLite3Index : public ::testing::Test
+                               {
+protected:
+    // DB handle
+    sdc::db::SQLite3 * _db;
+    // SQL index relying on db
+    sdc::db::SQLValidityIndex<int> * _index;
+public:
+    typedef sdc::ValidityIndex<int, sdc::iDocuments<int>::DocumentLoadingState>::Updates Updates;
+    typedef sdc::iDocuments<int>::DocumentLoadingState AuxInfo;
+    void SetUp() override {
+        _db = new sdc::db::SQLite3(":memory:"
+                //, &std::cout  // TODO envvar to ctrl debug printout
+                );  
+        _index = new sdc::db::SQLValidityIndex<int>(*_db);
+    }
+    void TearDown() override {
+        delete _index;
+        delete _db;
+    }
+};
 
-TEST_F(EmptyTestingIndex, ThrowsErrorOnNoType) {
-    auto u = updates( "WrongType", 123, true );
+TEST_F(EmptyTestingSQLite3Index, ThrowsErrorOnNoType) {
+    auto u = _index->updates( "WrongType", 123, true );
     EXPECT_TRUE(u.empty());
     // TODO errors::NoData
 }
 
-TEST_F(EmptyTestingIndex, ReturnsEmptyUpdateOnNoExceptNoType) {
-    sdc::ValidityIndex<int, sdc::aux::MetaInfo>::Updates u;
+TEST_F(EmptyTestingSQLite3Index, ReturnsEmptyUpdateOnNoExceptNoType) {
+    Updates u;
     // overlay=true
-    EXPECT_THROW( u = updates( "WrongType", 123, false )
+    EXPECT_THROW( u = _index->updates( "WrongType", 123, false )
                 , sdc::errors::UnknownDataType );
     // TODO errors::NoData
+}
+
+TEST_F(EmptyTestingSQLite3Index, CanNotAddBlockWithoutADcoument) {
+    AuxInfo ai;
+    EXPECT_THROW( _index->add_entry( "The Band of the Hawk"  // document ID
+              , "Battle Beast"  // typename
+              , 10, sdc::ValidityTraits<int>::unset  // validity period
+              , ai)
+            , std::runtime_error );
 }
 
 // Index with single entry with open bound
 // --
 // Corresponds to case when single entry defines validity period that starts
 // from certain data and lasts forever
-class OpenSingularTestingIndex : public ::testing::Test
-                               , public ::sdc::ValidityIndex<int, sdc::aux::MetaInfo>
-                               {
+class OpenSingularSQLite3TestingIndex : public EmptyTestingSQLite3Index {
 protected:
     void SetUp() override {
-        sdc::aux::MetaInfo mi;
-        add_entry( "The Band of the Hawk"  // document ID
+        EmptyTestingSQLite3Index::SetUp();
+        AuxInfo ai = {
+                  .docDefaults = {
+                       .dataType = "Type1"
+                     , .validityRange = {100, 150}
+                     , .baseMD = {}
+                  }
+                , .loader = nullptr
+                , .dataBlockBgn = 10
+            };
+        sdc::utils::DocumentProperties docProps = {
+                .mod_time = 100500,
+                .size = 100,
+                .hashsum = "abcdef",
+                .content = {}
+            };
+        sdc::db::ItemID defaultTypeID = _db->ensure_type("Battle Beast");
+        sdc::db::ItemID defaultPeriodID = _db->ensure_period(100, 200);
+        _db->add_document( "The Band of the Hawk"
+                , docProps
+                , defaultTypeID
+                , defaultPeriodID
+                );
+
+        // common entry
+        _index->add_entry( "The Band of the Hawk"  // document path
               , "Battle Beast"  // typename
               , 10, sdc::ValidityTraits<int>::unset  // validity period
-              , mi
+              , ai
               );
     }
 };
 
-
-TEST_F(OpenSingularTestingIndex, ThrowsErrorOnNoType) {
+TEST_F(OpenSingularSQLite3TestingIndex, ThrowsErrorOnNoType) {
     // overlay=true
-    auto us = updates( "WrongType", 123, true );
+    Updates us = _index->updates( "WrongType", 123, true );
     EXPECT_TRUE(us.empty());
     // overlay=false
-    us = updates( "WrongType", 123, true );
+    us = _index->updates( "WrongType", 123, true );
     EXPECT_TRUE(us.empty());
 }
 
-TEST_F(OpenSingularTestingIndex, ReturnsEmptyUpdateOnNoExceptNoType) {
+TEST_F(OpenSingularSQLite3TestingIndex, ReturnsEmptyUpdateOnNoExceptNoType) {
     Updates us;
     // overlay=true
-    EXPECT_THROW( us = updates( "WrongType", 123, false )
+    EXPECT_THROW( us = _index->updates( "WrongType", 123, false )
                 , sdc::errors::UnknownDataType );
     // overlay=false
-    EXPECT_THROW( us = updates( "WrongType", 123, false )
+    EXPECT_THROW( us = _index->updates( "WrongType", 123, false )
                 , sdc::errors::UnknownDataType );
 }
 
-TEST_F(OpenSingularTestingIndex, FindsProperUpdate ) {
+TEST_F(OpenSingularSQLite3TestingIndex, FindsProperUpdate ) {
     Updates::value_type l;
-    auto us = updates( "Battle Beast", 10, true); {
+    auto us = _index->updates( "Battle Beast", 10, true); {
         EXPECT_EQ(us.size(), 1);
         const auto & entry = *us.begin();
         ASSERT_TRUE( entry.second );
@@ -77,7 +191,7 @@ TEST_F(OpenSingularTestingIndex, FindsProperUpdate ) {
         EXPECT_FALSE( sdc::ValidityTraits<int>::is_set(update.validTo) );
         //EXPECT_EQ( update.lineNo, 123 );
     }
-    us = updates( "Battle Beast", 10, false); {
+    us = _index->updates( "Battle Beast", 10, false); {
         EXPECT_EQ(us.size(), 1);
         const auto & entry = *us.begin();
         ASSERT_TRUE( entry.second );
@@ -87,13 +201,13 @@ TEST_F(OpenSingularTestingIndex, FindsProperUpdate ) {
         EXPECT_FALSE( sdc::ValidityTraits<int>::is_set(update.validTo) );
         //EXPECT_EQ( update.lineNo, 123 );
     }
-    l = latest("Battle Beast", 10); {
+    l = _index->latest("Battle Beast", 10); {
         EXPECT_EQ( l.second->docID,  "The Band of the Hawk" );
         EXPECT_FALSE( sdc::ValidityTraits<int>::is_set(l.second->validTo) );
         //EXPECT_EQ( l.second->lineNo, 123 );
     }
 
-    us = updates( "Battle Beast", 999, true); {
+    us = _index->updates( "Battle Beast", 999, true); {
         EXPECT_EQ(us.size(), 1);
         const auto & entry = *us.begin();
         ASSERT_TRUE( entry.second );
@@ -103,7 +217,7 @@ TEST_F(OpenSingularTestingIndex, FindsProperUpdate ) {
         EXPECT_FALSE( sdc::ValidityTraits<int>::is_set(update.validTo) );
         //EXPECT_EQ( update.lineNo, 123 );
     }
-    us = updates( "Battle Beast", 999, false); {
+    us = _index->updates( "Battle Beast", 999, false); {
         EXPECT_EQ(us.size(), 1);
         const auto & entry = *us.begin();
         ASSERT_TRUE( entry.second );
@@ -113,13 +227,14 @@ TEST_F(OpenSingularTestingIndex, FindsProperUpdate ) {
         EXPECT_FALSE( sdc::ValidityTraits<int>::is_set(update.validTo) );
         //EXPECT_EQ( update.lineNo, 123 );
     }
-    l = latest("Battle Beast", 10); {
+    l = _index->latest("Battle Beast", 10); {
         EXPECT_EQ( l.second->docID,  "The Band of the Hawk" );
         EXPECT_FALSE( sdc::ValidityTraits<int>::is_set(l.second->validTo) );
         //EXPECT_EQ( l.second->lineNo, 123 );
     }
 }
 
+#if 0
 TEST_F( OpenSingularTestingIndex, HandlesEmptyUpdateOnOutOfRange ) {
     auto us = updates( "Battle Beast", 9, true);
     EXPECT_TRUE(us.empty());
@@ -321,62 +436,5 @@ TEST_F(TestingIndex, HandlesEmptyUpdateOnOutOfRange ) {
     EXPECT_THROW( l = latest("Cabaret Nocturne", 9)
                 , sdc::errors::NoCalibrationData );
 }
+#endif
 
-TEST(Updates, complexCaseProperlySorted) {
-    typedef sdc::iValidityIndex<int, sdc::iDocuments<int>::DocumentLoadingState>::DocumentEntry
-        DocumentEntry;
-    typedef sdc::iValidityIndex<int, sdc::iDocuments<int>::DocumentLoadingState>::Updates
-        Updates;
-
-    std::list<std::pair<std::string, size_t>> excPaths = {
-        {"one/1",       12},
-        {"three/c",     10},
-        {"two/b",       10},
-        {"two/z/seven", 10},
-        {"three/b",     10},
-        {"two/a",       10},
-        {"three/a",     10},
-        {"one/2",       10},
-        {"two/z/seven", 15},
-        {"one/1",       10},
-    };
-
-    std::vector<std::pair<std::string, size_t>> chck = {
-        {"three/a", 10}, {"three/b", 10}, {"three/c", 10},
-        {"two/z/seven", 10}, {"two/z/seven", 15},
-        {"two/a", 10}, {"two/b", 10},
-        {"one/1", 10}, {"one/1", 12}, {"one/2", 10}
-    };
-    ASSERT_EQ(chck.size(), excPaths.size());
-
-    std::vector<std::string> bases = {
-        "three/",
-        "two/z",
-        "two/",
-        "one"
-    };
-
-    {
-        std::list<DocumentEntry> updStorage;
-        Updates upds;
-        for(const auto & pp: excPaths) {
-            DocumentEntry docEntry;
-            docEntry.docID = pp.first;
-            docEntry.auxInfo.dataBlockBgn = pp.second;
-            updStorage.push_back(docEntry);
-            upds.push_back({123, &updStorage.back()});
-        }
-
-        sdc::iDocuments<int>::sort_updates(upds, bases);
-
-        ASSERT_EQ(upds.size(), excPaths.size());
-
-        size_t nEl = 0;
-        for(const auto & item : upds) {
-            EXPECT_EQ(item.second->docID, chck[nEl].first);
-            EXPECT_EQ(item.second->auxInfo.dataBlockBgn, chck[nEl].second)
-                << " element #" << nEl << " (" << chck[nEl].first << ")";
-            ++nEl;
-        }
-    }
-}
