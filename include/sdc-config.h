@@ -1,7 +1,7 @@
 #ifndef H_SDC_CONFIG_H
 #define H_SDC_CONFIG_H 1
 
-#define SDC_VERSION "0.3.5"
+#define SDC_VERSION "0.4.0"
 
 #define SQLite3_FOUND 0
 #define SNAPPY_FOUND 0
