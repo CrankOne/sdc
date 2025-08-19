@@ -122,6 +122,7 @@ DocumentProperties::compress_content(const std::vector<char>& raw
     return result;
 }
 
+#if defined(OPENSSL_FOUND) && OPENSSL_FOUND
 void
 compute_md5_openssl(const unsigned char* data, size_t len, char out_hash[128]) {
     #if OPENSSL_VERSION_MAJOR >= 3
@@ -159,6 +160,7 @@ compute_md5_openssl(const unsigned char* data, size_t len, char out_hash[128]) {
                   md[8], md[9], md[10], md[11],
                   md[12], md[13], md[14], md[15]);
 }
+#endif
 
 int
 check_doc_local_file(
@@ -190,10 +192,14 @@ check_doc_local_file(
 
     // Compute MD5
     if (flags & DocumentProperties::kMD5Sum) {
+        #if defined(OPENSSL_FOUND) && OPENSSL_FOUND
         compute_md5_openssl( reinterpret_cast<const unsigned char*>(rawData.data())
                 , rawData.size()
                 , current.hashsum
                 );
+        #else
+        throw std::runtime_error("OpenSSL not found, MD5 checksum calc disabled.");  // TODO: provide custom implem?
+        #endif
     }
 
     // Compress

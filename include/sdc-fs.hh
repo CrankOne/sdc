@@ -8,10 +8,12 @@
 namespace sdc {
 namespace utils {
 
+#if defined(OPENSSL_FOUND) && OPENSSL_FOUND
 ///\brief Computes MD5 checksum of given bytes array
 ///
 /// Relies on OpenSSL routines internally.
 void compute_md5_openssl(const unsigned char* data, size_t len, char out_hash[128]);
+#endif
 
 /**\brief Document properties struct
  *
