@@ -11,10 +11,10 @@ libsdc.a: sdc.o
 sdc.o: src/sdc.cc include/sdc-base.hh include/sdc.hh
 	g++ -c $< -Iinclude $(CFLAGS)
 
-include/sdc.hh: include/sdc.hh.in
+include/sdc-config.h: include/sdc-config.h.in
 	sed -e 's/#cmakedefine\ SDC_VERSION\ \"@SDC_VERSION@\"/#define SDC_VERSION "0.1"/g' \
 	-e 's/# *cmakedefine01\ ROOT_FOUND/#define ROOT_FOUND\ 1/g' \
-	include/sdc.hh.in > $@
+	include/sdc.h.in > $@
 
 clean:
 	rm -f libsdc.a sdc.o include/sdc.hh
