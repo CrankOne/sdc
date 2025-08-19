@@ -4,6 +4,7 @@ doc/build/*
 *.swo
 compile_commands.json
 .cache/*
+include/sdc-config.h
 
 # Prerequisites
 *.d

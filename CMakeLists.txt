@@ -211,7 +211,7 @@ endif (BUILD_TESTS)
 #
 # (Un)install
 set_target_properties (${sdc_LIB} PROPERTIES PUBLIC_HEADER
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/sdc-config.h;include/sdc-base.hh")
+    "include/sdc-config.h;include/sdc-base.hh;include/sdc.hh")  # TODO: fs, db, sql, sqlite3
 include (GNUInstallDirs)
 install (TARGETS ${sdc_LIB}
     EXPORT ${CMAKE_PROJECT_NAME}Targets
