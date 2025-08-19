@@ -106,7 +106,7 @@ variables:
   tags: [cvmfs-na64.cern.ch]
   stage: deploy
   script:
-    - $HOME/lpkgm/lpkgm-na64.sh -Dplatform=${PLATFORM} install ${CI_PROJECT_NAME} "${PACKAGE_VERSION}"
+    - $HOME/lpkgm/lpkgm.na64-packaging/na64-soft -Dplatform=${PLATFORM} install ${CI_PROJECT_NAME} "${PACKAGE_VERSION}"
 
 
 #
