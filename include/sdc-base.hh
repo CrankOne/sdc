@@ -1591,7 +1591,14 @@ FS::FS( const std::string & paths_
     for(std::string & cpath : _pathsList) {
         if(cpath.empty()) continue;
         struct stat cPathStat;
-        stat(cpath.c_str(), &cPathStat);  // also follows symlinks
+        bzero(&cPathStat, sizeof(struct stat));
+        if(0 != stat(cpath.c_str(), &cPathStat)) {  // also follows symlinks
+            int errc = errno;
+            std::cerr << "Error accessing path \"" << cpath << "\": (" << errc
+                << ") " << strerror(errc)
+                << "; omitting path." << std::endl;
+            continue;
+        }
         switch( cPathStat.st_mode & S_IFMT ) {
             case S_IFDIR : _dirPaths.push_back(cpath.c_str()); break;
             case S_IFREG : _standaloneFiles.push_back(cpath.c_str()); break;
@@ -1632,20 +1639,10 @@ FS::FS( const std::string & paths_
 #if (!defined(SDC_NO_IMPLEM)) || !SDC_NO_IMPLEM
 SDC_INLINE
 FS::FS(const FS & o) : _pathsList(o._pathsList)
+                     , _dirPaths(o._dirPaths)
+                     , _standaloneFiles(o._standaloneFiles)
                      , _fts(nullptr)
                      {
-    std::unordered_set<std::string> files( o._standaloneFiles.begin()
-                                         , o._standaloneFiles.end() );
-    for(const std::string & cptok : _pathsList) {
-        if(cptok.empty()) continue;
-        if(files.find(cptok) == files.end()) {
-            _dirPaths.push_back(cptok.c_str());
-        } else {
-            _standaloneFiles.push_back(cptok.c_str());
-        }
-    }
-    _dirPaths.push_back(NULL);
-    _cFileIt = _standaloneFiles.begin();
     if( _dirPaths.size() > 1 ) {
         // Create FTS instance
         _fts = new FTSFiltered( const_cast<char * const *>(_dirPaths.data())
