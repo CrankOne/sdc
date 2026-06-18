@@ -112,14 +112,7 @@ macro(get_pkg_version PKG_PREFIX)
          )
     endif()
     set(_DFT_REFS "master" "main" "trunk" "HEAD")
-    #if(NOT ${${PKG_PREFIX}_REF} IN_LIST _DFT_REFS)  # TODO: added in 3.3
-    set(_found FALSE)
-    foreach(_item IN LISTS _DFT_REFS)
-        if(_item STREQUAL ${${PKG_PREFIX}_REF})
-            set(_found TRUE)
-        endif()
-    endforeach()
-    if(NOT _found)  # TODO: subst with one-liner above
+    if(NOT ${${PKG_PREFIX}_REF} IN_LIST _DFT_REFS)
         file (APPEND
               "${CMAKE_CURRENT_BINARY_DIR}/version.txt"
               ".${${PKG_PREFIX}_REF}"
