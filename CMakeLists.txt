@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-cmake_minimum_required (VERSION 3.9)
+cmake_minimum_required (VERSION 2.8.12)
 
 include (cmake/version.cmake)
 get_pkg_version (SDC)
@@ -22,7 +22,10 @@ set (SDC_VERSION ${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR}.${SDC_VERSION_TWEAK})
 
 #
 # General Project Features
-project (sdc VERSION ${SDC_VERSION})
+#project(sdc VERSION ${SDC_VERSION})  # TODO: use in new CMake
+project(sdc)
+set(PROJECT_VERSION ${SDC_VERSION})
+
 
 #
 # Options
@@ -89,12 +92,14 @@ find_package(ROOT QUIET COMPONENTS MathCore)
 # To compress data in cache
 find_package(Snappy QUIET)  # SNAPPY_FOUND
 find_package(ZLIB QUIET)  # ZLIB_FOUND
+find_package(SQlite3 QUIET)
 # To obtain checksums
 find_package(OpenSSL QUIET)  # OPENSSL_FOUND
 
 #
 # Library
-add_compile_options (-Wall)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -Wall")
 
 set (sdc_LIB sdc)
 
@@ -104,16 +109,25 @@ if(SQLite3_FOUND)
 endif(SQLite3_FOUND)
 
 add_library (${sdc_LIB} ${sdc_SOURCES})
-target_include_directories (${sdc_LIB}
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    PUBLIC $<INSTALL_INTERFACE:include>
-    )
-if(SQLite3_FOUND)
-    target_link_libraries(${sdc_LIB} PUBLIC SQLite::SQLite3)
-endif(SQLite3_FOUND)
+include_directories(
+    ${CMAKE_CURRENT_BINARY_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )  # TODO: # prefer new style, once finally migrated from CC7:
+#target_include_directories (${sdc_LIB}
+#    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+#    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+#    PUBLIC $<INSTALL_INTERFACE:include>
+#    )
+
+# todo: a draft for sqlite
+#if(SQLite3_FOUND)
+#    target_link_libraries(${sdc_LIB} PUBLIC SQLite::SQLite3)
+#endif(SQLite3_FOUND)
+#include_directories(${SQLite3_INCLUDE_DIRS})
+#target_link_libraries(${sdc_LIB} ${SQLite3_LIBRARIES})
+
 if(SNAPPY_FOUND)
-    target_include_directories(${sdc_LIB} ${SNAPPY_INCLUDE_DIR})
+    target_include_directories(${sdc_LIB} PRIVATE ${SNAPPY_INCLUDE_DIR})
     target_link_libraries(${sdc_LIB} PRIVATE ${SNAPPY_LIBRARY})
 endif(SNAPPY_FOUND)
 if(ZLIB_FOUND)
@@ -182,10 +196,14 @@ if (BUILD_TESTS)
             SYSTEM ${GTEST_INCLUDE_DIRS})
         # Workaround for CMake bug found in some versions in 2012-2104, see:
         #   - https://stackoverflow.com/a/29871891/1734499
-        set (THREADS_PREFER_PTHREAD_FLAG ON)
+        #set (THREADS_PREFER_PTHREAD_FLAG ON)  # too new for 2.8.12
         find_package (Threads REQUIRED)
         #target_link_libraries( ${na64_UNITTESTS} PRIVATE Threads::Threads )
-        target_link_libraries (${sdc_UNITTESTS} ${GTEST_BOTH_LIBRARIES} Threads::Threads ${sdc_LIB})
+        #target_link_libraries (${sdc_UNITTESTS} ${GTEST_BOTH_LIBRARIES} Threads::Threads ${sdc_LIB})
+        target_link_libraries(${sdc_UNITTESTS}
+            ${GTEST_BOTH_LIBRARIES}
+            ${CMAKE_THREAD_LIBS_INIT}
+            ${sdc_LIB})
 
         if (COVERAGE)
             setup_target_for_coverage_gcovr_html (NAME ${sdc_UNITTESTS}-coverage
@@ -213,8 +231,12 @@ endif (BUILD_TESTS)
 set_target_properties (${sdc_LIB} PROPERTIES PUBLIC_HEADER
     "include/sdc-config.h;include/sdc-base.hh;include/sdc.hh")  # TODO: fs, db, sql, sqlite3
 include (GNUInstallDirs)
+set (CMAKE_INSTALL_LIBDIR lib)
 install (TARGETS ${sdc_LIB}
     EXPORT ${CMAKE_PROJECT_NAME}Targets
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    #EXPORT ${CMAKE_PROJECT_NAME}Targets  # TODO: re-eanble in newer CMake
     PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     )
        
@@ -224,32 +246,34 @@ add_custom_target (uninstall
     )
 
 # Usual CMake config export hell
-install (EXPORT ${CMAKE_PROJECT_NAME}Targets
-    FILE ${CMAKE_PROJECT_NAME}Targets.cmake
-    DESTINATION lib/cmake//${CMAKE_PROJECT_NAME}
-    )
-include (CMakePackageConfigHelpers)
-configure_package_config_file (${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
-    "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}Config.cmake"
-    INSTALL_DESTINATION "lib/cmake/${CMAKE_PROJECT_NAME}"
-    NO_SET_AND_CHECK_MACRO
-    NO_CHECK_REQUIRED_COMPONENTS_MACRO
-    )
-# omit tweak version
-write_basic_package_version_file (
-    "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}ConfigVersion.cmake"
-    VERSION "${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR}"
-    COMPATIBILITY AnyNewerVersion
-    )
-install (FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}Config.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}ConfigVersion.cmake
-    DESTINATION lib/cmake/${CMAKE_PROJECT_NAME}
-    )
-# Permits using SDC from build dir (without installing)
-export(EXPORT ${CMAKE_PROJECT_NAME}Targets
-    FILE "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}Targets.cmake"
-    )
+if(CMAKE_VERSION VERSION_GREATER "3.5")
+    install (EXPORT ${CMAKE_PROJECT_NAME}Targets
+        FILE ${CMAKE_PROJECT_NAME}Targets.cmake
+        DESTINATION lib/cmake//${CMAKE_PROJECT_NAME}
+        )
+    include (CMakePackageConfigHelpers)
+    configure_package_config_file (${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
+        "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}Config.cmake"
+        INSTALL_DESTINATION "lib/cmake/${CMAKE_PROJECT_NAME}"
+        NO_SET_AND_CHECK_MACRO
+        NO_CHECK_REQUIRED_COMPONENTS_MACRO
+        )
+    # omit tweak version
+    write_basic_package_version_file (
+        "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}ConfigVersion.cmake"
+        VERSION "${SDC_VERSION_MAJOR}.${SDC_VERSION_MINOR}"
+        COMPATIBILITY AnyNewerVersion
+        )
+    install (FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}Config.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}ConfigVersion.cmake
+        DESTINATION lib/cmake/${CMAKE_PROJECT_NAME}
+        )
+    # Permits using SDC from build dir (without installing)
+    export(EXPORT ${CMAKE_PROJECT_NAME}Targets
+        FILE "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}Targets.cmake"
+        )
+endif()
 
 # CPack aux (packaging)
 include(InstallRequiredSystemLibraries)
