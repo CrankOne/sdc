@@ -213,6 +213,7 @@ endif (BUILD_TESTS)
 set_target_properties (${sdc_LIB} PROPERTIES PUBLIC_HEADER
     "include/sdc-config.h;include/sdc-base.hh;include/sdc.hh")  # TODO: fs, db, sql, sqlite3
 include (GNUInstallDirs)
+set (CMAKE_INSTALL_LIBDIR lib)
 install (TARGETS ${sdc_LIB}
     EXPORT ${CMAKE_PROJECT_NAME}Targets
     PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
