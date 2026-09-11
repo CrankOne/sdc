@@ -11,6 +11,14 @@ variables:
   # the latest tag.
   GIT_DEPTH: 0
 
+# Explicit stage list: `build'/`deploy' relates to CVMFS/lpkgm chain,
+# `rpm-build'/`rpm-release' are for RPM packaging chain only.
+stages:
+  - build
+  - deploy
+  - rpm-build
+  - rpm-release
+
 
 #
 # Templates
@@ -148,6 +156,83 @@ x86_64-el9-gcc11-opt-build:
 x86_64-el9-gcc11-opt-deploy:
   <<: *lcg-deploy-stage
   needs: [x86_64-el9-gcc11-opt-build]
+
+
+#
+# RPM packaging (parallel to the CVMFS/lpkgm chain)
+#
+# Builds native Alma9 RPMs (opt+dbg) and publishes them as generic packages
+# plus a GitLab Release, on tag pipelines only. Does not touch/replace the
+# CVMFS deployment chain.
+#
+# NOTE: assumes `rpm-build' (rpmbuild) is available in the na64sw-ci-native-alma9
+# image; add it there if the job fails looking for `rpmbuild'.
+
+.x-rpm-build-stage: &rpm-build-stage
+  stage: rpm-build
+  tags: [cvmfs]
+  image: gitlab-registry.cern.ch/p348/na64sw/na64sw-ci-native-alma9
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  variables:
+    GIT_STRATEGY: clone
+  script:
+    - export RPM_CFG_SUFFIX=${CI_JOB_NAME##*-}  # opt or dbg, from job name
+    - 'export CMAKE_BUILD_TYPE=$([[ $RPM_CFG_SUFFIX = dbg ]] && echo "Debug" || echo "Release")'
+    - echo "Building ${RPM_CFG_SUFFIX} RPM (${CMAKE_BUILD_TYPE}) for $CI_COMMIT_TAG"
+    - git fetch --tags
+    - mkdir build-rpm && cd build-rpm
+    # configure once to obtain version.txt, then reconfigure with RPM
+    # generator and an explicit, suffix-tagged file name
+    - cmake .. -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=/usr
+    - export PACKAGE_VERSION=$(cat version.txt)
+    - export RPM_FILE_NAME=${CI_PROJECT_NAME}-${PACKAGE_VERSION}-${RPM_CFG_SUFFIX}.el9.x86_64
+    - >
+        cmake .. -DCPACK_GENERATOR=RPM \
+          -DCPACK_PACKAGE_FILE_NAME=${RPM_FILE_NAME} \
+          -DCPACK_PACKAGE_VENDOR="NA64 Collaboration (CERN), GitLab CI"
+    - VERBOSE=1 make -j4
+    - make package
+    - echo "RPM_${RPM_CFG_SUFFIX^^}_VERSION=$PACKAGE_VERSION" > ../rpm.env
+    - echo "RPM_${RPM_CFG_SUFFIX^^}_FILENAME=${RPM_FILE_NAME}.rpm" >> ../rpm.env
+  artifacts:
+    paths:
+      - build-rpm/*.rpm
+    reports:
+      dotenv: rpm.env
+
+x86_64-el9-rpm-opt:
+  <<: *rpm-build-stage
+
+x86_64-el9-rpm-dbg:
+  <<: *rpm-build-stage
+
+# Publishes both RPMs to the generic package registry and attaches them to
+# a GitLab Release for the tag. Relies on GitLab's release-cli image; if
+# CERN runners can't reach registry.gitlab.com, swap for a mirrored image.
+rpm-release:
+  stage: rpm-release
+  tags: [cvmfs]
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  needs:
+    - job: x86_64-el9-rpm-opt
+      artifacts: true
+    - job: x86_64-el9-rpm-dbg
+      artifacts: true
+  script:
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file build-rpm/${RPM_OPT_FILENAME} "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}-rpm/${CI_COMMIT_TAG}/${RPM_OPT_FILENAME}"'
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file build-rpm/${RPM_DBG_FILENAME} "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}-rpm/${CI_COMMIT_TAG}/${RPM_DBG_FILENAME}"'
+  release:
+    tag_name: $CI_COMMIT_TAG
+    description: "RPM packages (Alma9, opt+dbg) for $CI_COMMIT_TAG"
+    assets:
+      links:
+        - name: "${RPM_OPT_FILENAME}"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}-rpm/${CI_COMMIT_TAG}/${RPM_OPT_FILENAME}"
+        - name: "${RPM_DBG_FILENAME}"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}-rpm/${CI_COMMIT_TAG}/${RPM_DBG_FILENAME}"
 
 ...
 # vim: set tabstop=2 :

@@ -258,5 +258,12 @@ set(CPACK_PACKAGE_VERSION_MAJOR "${SDC_VERSION_MAJOR}")
 set(CPACK_PACKAGE_VERSION_MINOR "${SDC_VERSION_MINOR}")
 set(CPACK_PACKAGE_VERSION_PATCH "${SDC_VERSION_TWEAK}")
 set(CPACK_SOURCE_GENERATOR "TBZ2")
+# RPM-specific metadata (only takes effect when CPACK_GENERATOR includes RPM;
+# does not affect the TGZ archives used for the CVMFS/lpkgm deployment)
+set(CPACK_RPM_PACKAGE_LICENSE "LGPL-2.1-or-later")
+set(CPACK_RPM_PACKAGE_GROUP "Applications/Physics")
+set(CPACK_RPM_PACKAGE_URL "https://github.com/CrankOne/sdc")
+set(CPACK_RPM_PACKAGE_AUTOREQPROV "yes")
+set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")
 include(CPack)
 

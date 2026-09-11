@@ -1,0 +1,87 @@
+name: RPM release (Alma9)
+
+# Builds native Alma9 RPMs (opt+dbg) on tag push and attaches them to the
+# corresponding GitHub Release. GitHub Packages has no RPM/generic package
+# format, so release assets are the closest equivalent to the GitLab
+# "generic package" chain used on the CERN side (.gitlab-ci.cern.yml).
+# Parallel, independent addition: does not touch any existing workflow.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-rpm:
+    name: Build RPM (${{ matrix.suffix }})
+    runs-on: ubuntu-latest
+    container: almalinux:9
+    strategy:
+      matrix:
+        include:
+          - build_type: Release
+            suffix: opt
+          - build_type: Debug
+            suffix: dbg
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf install -y epel-release
+          dnf install -y gcc-c++ cmake make rpm-build git openssl-devel zlib-devel snappy-devel
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Mark workspace as safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Configure (to obtain package version)
+        run: |
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_INSTALL_PREFIX=/usr
+
+      - name: Reconfigure with RPM generator
+        working-directory: build
+        run: |
+          PACKAGE_VERSION=$(cat version.txt)
+          RPM_FILE_NAME=sdc-${PACKAGE_VERSION}-${{ matrix.suffix }}.el9.x86_64
+          echo "RPM_FILE_NAME=${RPM_FILE_NAME}" >> "$GITHUB_ENV"
+          cmake .. -DCPACK_GENERATOR=RPM \
+            -DCPACK_PACKAGE_FILE_NAME=${RPM_FILE_NAME} \
+            -DCPACK_PACKAGE_VENDOR="NA64 Collaboration (CERN), GitHub CI"
+
+      - name: Build
+        working-directory: build
+        run: make -j"$(nproc)"
+
+      - name: Package
+        working-directory: build
+        run: make package
+
+      - name: Upload RPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-${{ matrix.suffix }}
+          path: build/${{ env.RPM_FILE_NAME }}.rpm
+
+  release:
+    name: Publish GitHub release
+    needs: build-rpm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download RPMs
+        uses: actions/download-artifact@v4
+        with:
+          path: rpms
+          pattern: rpm-*
+          merge-multiple: true
+
+      - name: Attach RPMs to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: rpms/*.rpm
