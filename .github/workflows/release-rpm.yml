@@ -6,12 +6,10 @@ name: RPM release (Alma9)
 # "generic package" chain used on the CERN side (.gitlab-ci.cern.yml).
 # Parallel, independent addition: does not touch any existing workflow.
 
-#on:
-#  push:
-#    tags:
-#      - 'v*'
-
-on: push
+on:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build-rpm:
