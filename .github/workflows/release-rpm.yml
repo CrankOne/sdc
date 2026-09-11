@@ -6,10 +6,12 @@ name: RPM release (Alma9)
 # "generic package" chain used on the CERN side (.gitlab-ci.cern.yml).
 # Parallel, independent addition: does not touch any existing workflow.
 
-on:
-  push:
-    tags:
-      - 'v*'
+#on:
+#  push:
+#    tags:
+#      - 'v*'
+
+on: push
 
 jobs:
   build-rpm:
@@ -28,6 +30,8 @@ jobs:
         run: |
           dnf install -y epel-release
           dnf install -y gcc-c++ cmake make rpm-build git openssl-devel zlib-devel snappy-devel
+          dnf config-manager --set-enabled crb
+          dnf install root
 
       - name: Checkout
         uses: actions/checkout@v4
