@@ -31,7 +31,7 @@ jobs:
           dnf install -y epel-release
           dnf install -y gcc-c++ cmake make rpm-build git openssl-devel zlib-devel snappy-devel
           dnf config-manager --set-enabled crb
-          dnf install root
+          dnf install -y root
 
       - name: Checkout
         uses: actions/checkout@v4
